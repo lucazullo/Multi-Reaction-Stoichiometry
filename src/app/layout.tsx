@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Stoichiometry Calculator",
-  description: "Balance chemical equations and calculate reactant/product quantities",
+  title: "Multi-Reaction Stoichiometry Calculator",
+  description: "Build parallel and sequential reaction systems with stoichiometry, thermodynamics, and economics",
 };
 
 export default function RootLayout({

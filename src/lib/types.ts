@@ -70,6 +70,74 @@ export interface ThermodynamicsResult {
   }>;
 }
 
+// --- Multi-Reaction System Types ---
+
+export interface ReactionNode {
+  id: string;
+  reaction: BalancedReaction;
+  label: string; // user's original description
+}
+
+export interface SeriesLink {
+  id: string;
+  fromReactionId: string;
+  fromProductIndex: number;
+  toReactionId: string;
+  toReactantIndex: number;
+  fraction: number; // 0–1, default 1.0
+}
+
+export interface ReactionSystem {
+  nodes: ReactionNode[];
+  links: SeriesLink[];
+}
+
+export interface SubstanceTotals {
+  formula: string;
+  name: string;
+  role: "net-reactant" | "net-product" | "intermediate" | "excess" | "deficit";
+  totalMoles: number;
+  totalGrams: number;
+  totalKilograms: number;
+  totalPounds: number;
+  produced: number; // total moles produced across all reactions
+  consumed: number; // total moles consumed across all reactions
+  note?: string; // e.g. "Excess from Rxn 1 → Rxn 2 link (20% unused)"
+}
+
+export interface SystemCalculationResult {
+  perReaction: Map<string, CalculationResult[]>;
+  totals: SubstanceTotals[];
+}
+
+export interface SystemThermodynamics {
+  perReaction: Map<string, ThermodynamicsResult>;
+  totalDeltaH: number;
+  isExothermic: boolean;
+}
+
+export interface SystemEconomics {
+  perSubstance: SystemEconLine[];
+  feedstockCost: number;
+  productValue: number;    // net-products + excess
+  delta: number;           // productValue - feedstockCost
+}
+
+export interface SystemEconLine {
+  formula: string;
+  name: string;
+  role: SubstanceTotals["role"];
+  quantity: number;        // net moles
+  quantityGrams: number;
+  quantityKg: number;
+  quantityLb: number;
+  pricePerUnit: number | null;
+  priceUnit: AmountUnit;
+  totalValue: number;      // price × quantity in chosen unit
+}
+
+// --- API Types ---
+
 export interface ParseReactionRequest {
   description: string;
 }

@@ -1,9 +1,16 @@
 import type {
   CalculationResult,
   EconomicsSummary,
-  ThermodynamicsResult,
   EnergyUnit,
+  ReactionSystem,
+  SubstanceTotals,
+  SystemCalculationResult,
+  SystemEconomics,
+  SystemThermodynamics,
+  ThermodynamicsResult,
 } from "./types";
+// EconomicsSummary still used for single-reaction generateEconomicsCSV
+import { plainFormula } from "./utils";
 
 const KJ_TO_BTU = 0.947817;
 
@@ -27,39 +34,13 @@ function ec(kJ: number, eu: EnergyUnit): number {
   return eu === "BTU" ? kJ * KJ_TO_BTU : kJ;
 }
 
-// Convert Unicode subscript/superscript characters to plain ASCII
-// e.g. "H₂O" → "H2O", "CO₂" → "CO2", "Fe₂O₃" → "Fe2O3"
-const SUBSCRIPT_MAP: Record<string, string> = {
-  "\u2080": "0", "\u2081": "1", "\u2082": "2", "\u2083": "3", "\u2084": "4",
-  "\u2085": "5", "\u2086": "6", "\u2087": "7", "\u2088": "8", "\u2089": "9",
-};
-const SUPERSCRIPT_MAP: Record<string, string> = {
-  "\u2070": "0", "\u00B9": "1", "\u00B2": "2", "\u00B3": "3", "\u2074": "4",
-  "\u2075": "5", "\u2076": "6", "\u2077": "7", "\u2078": "8", "\u2079": "9",
-  "\u207A": "+", "\u207B": "-",
-};
-
-function plainFormula(formula: string): string {
-  let result = formula;
-  for (const [sub, digit] of Object.entries(SUBSCRIPT_MAP)) {
-    result = result.replaceAll(sub, digit);
-  }
-  for (const [sup, char] of Object.entries(SUPERSCRIPT_MAP)) {
-    result = result.replaceAll(sup, char);
-  }
-  // Also replace the arrow character
-  result = result.replaceAll("\u2192", "->");
-  return result;
-}
-
 // --- Individual table CSVs ---
 
 export function generateQuantitiesCSV(results: CalculationResult[]): string {
   const rows: string[] = [];
   rows.push(
     ["Substance", "Formula", "Role", "Moles", "Grams", "Kilograms", "Pounds", "Liters", "Gallons"]
-      .map(esc)
-      .join(",")
+      .map(esc).join(",")
   );
   for (const r of results) {
     rows.push(
@@ -86,7 +67,6 @@ export function generateThermodynamicsCSV(
   rows.push(`ΔHrxn (${eu}),${fmt(ec(thermodynamics.deltaH, eu))}`);
   rows.push("");
 
-  // Specific energy
   if (selectedResult) {
     const sel = selectedResult;
     const selName = plainFormula(sel.substance.formula);
@@ -100,7 +80,6 @@ export function generateThermodynamicsCSV(
     rows.push("");
   }
 
-  // Per-substance table
   rows.push(
     ["Substance", "Formula", "Role", "ΔHf° (kJ/mol)", "Moles", `Heat Contribution (${eu})`]
       .map(esc).join(",")
@@ -142,7 +121,7 @@ export function generateEconomicsCSV(economics: EconomicsSummary): string {
   return rows.join("\n");
 }
 
-// --- Combined CSV with all tables ---
+// --- Single-reaction combined CSV ---
 
 export function generateFullCSV(
   results: CalculationResult[],
@@ -153,11 +132,9 @@ export function generateFullCSV(
 ): string {
   const sections: string[] = [];
 
-  // Quantities
   sections.push("=== STOICHIOMETRY ===");
   sections.push(generateQuantitiesCSV(results));
 
-  // Thermodynamics
   if (thermodynamics) {
     sections.push("");
     sections.push("=== THERMODYNAMICS ===");
@@ -165,7 +142,6 @@ export function generateFullCSV(
     sections.push(generateThermodynamicsCSV(thermodynamics, energyUnit ?? "kJ", selResult));
   }
 
-  // Economics
   if (economics) {
     sections.push("");
     sections.push("=== COST ANALYSIS ===");
@@ -175,8 +151,102 @@ export function generateFullCSV(
   return sections.join("\n");
 }
 
+// --- Multi-reaction system CSV ---
+
+function generateTotalsCSV(totals: SubstanceTotals[]): string {
+  const rows: string[] = [];
+  rows.push(["Substance", "Formula", "Net Role", "Moles", "Grams", "Kilograms", "Pounds"].map(esc).join(","));
+  for (const t of totals) {
+    rows.push(
+      [t.name, plainFormula(t.formula), t.role, fmt(t.totalMoles), fmt(t.totalGrams), fmt(t.totalKilograms), fmt(t.totalPounds)]
+        .map(esc).join(",")
+    );
+  }
+  return rows.join("\n");
+}
+
+export function generateSystemFullCSV(
+  system: ReactionSystem,
+  systemResult: SystemCalculationResult,
+  systemThermo?: SystemThermodynamics | null,
+  systemEcon?: SystemEconomics | null,
+  energyUnit?: EnergyUnit
+): string {
+  const eu = energyUnit ?? "kJ";
+  const sections: string[] = [];
+
+  // Per-reaction sections
+  for (const node of system.nodes) {
+    const results = systemResult.perReaction.get(node.id);
+    if (!results) continue;
+
+    sections.push(`=== REACTION: ${plainFormula(node.reaction.equation)} ===`);
+    sections.push(`Description: ${node.label}`);
+    sections.push(generateQuantitiesCSV(results));
+
+    if (systemThermo) {
+      const thermo = systemThermo.perReaction.get(node.id);
+      if (thermo) {
+        sections.push("");
+        sections.push(generateThermodynamicsCSV(thermo, eu));
+      }
+    }
+
+    sections.push("");
+  }
+
+  // System totals
+  sections.push("=== SYSTEM TOTALS ===");
+  sections.push(generateTotalsCSV(systemResult.totals));
+
+  if (systemThermo) {
+    sections.push("");
+    const thermoLabel = systemThermo.isExothermic ? "Exothermic" : "Endothermic";
+    sections.push(`System Reaction Type,${thermoLabel}`);
+    sections.push(`System Total ΔH (${eu}),${fmt(ec(systemThermo.totalDeltaH, eu))}`);
+  }
+
+  if (systemEcon) {
+    sections.push("");
+    sections.push("=== SYSTEM ECONOMICS ===");
+    sections.push(["Substance", "Formula", "Role", "Net Quantity (kg)", "Price/Unit", "Unit", "Total Cost/Price ($)"].map(esc).join(","));
+    for (const e of systemEcon.perSubstance) {
+      sections.push([
+        e.name, plainFormula(e.formula), e.role,
+        fmt(e.quantityKg),
+        e.pricePerUnit !== null ? fmt(e.pricePerUnit) : "",
+        e.pricePerUnit !== null ? `$/${e.priceUnit}` : "",
+        fmt(e.totalValue),
+      ].map(esc).join(","));
+    }
+    sections.push("");
+    sections.push(`Total Feedstock Cost ($),${fmt(systemEcon.feedstockCost)}`);
+    sections.push(`Total Product/Excess Value ($),${fmt(systemEcon.productValue)}`);
+    sections.push(`Net Delta ($),${fmt(systemEcon.delta)}`);
+  }
+
+  // Links
+  if (system.links.length > 0) {
+    sections.push("");
+    sections.push("=== SERIES LINKS ===");
+    sections.push(["From Reaction", "Product", "To Reaction", "Reactant", "Fraction"].map(esc).join(","));
+    for (const link of system.links) {
+      const fromNode = system.nodes.find((n) => n.id === link.fromReactionId);
+      const toNode = system.nodes.find((n) => n.id === link.toReactionId);
+      const product = fromNode?.reaction.products[link.fromProductIndex];
+      const reactant = toNode?.reaction.reactants[link.toReactantIndex];
+      rows_push_link(sections, fromNode?.label ?? "", product ? plainFormula(product.formula) : "", toNode?.label ?? "", reactant ? plainFormula(reactant.formula) : "", link.fraction);
+    }
+  }
+
+  return sections.join("\n");
+}
+
+function rows_push_link(sections: string[], fromLabel: string, product: string, toLabel: string, reactant: string, fraction: number) {
+  sections.push([fromLabel, product, toLabel, reactant, String(fraction)].map(esc).join(","));
+}
+
 export function downloadCSV(csv: string, filename: string = "stoichiometry-results.csv") {
-  // BOM for Excel UTF-8 recognition
   const BOM = "\uFEFF";
   const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
