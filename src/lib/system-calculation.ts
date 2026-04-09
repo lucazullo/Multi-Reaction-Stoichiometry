@@ -1,20 +1,16 @@
 import type {
   CalculationInput,
   CalculationResult,
-  EconomicsSummary,
-  PriceEntry,
   ReactionSystem,
   SeriesLink,
   SubstanceTotals,
   SystemCalculationResult,
-  SystemEconomics,
   SystemThermodynamics,
   ThermodynamicsResult,
 } from "./types";
 import {
   calculateStoichiometry,
   calculateThermodynamics,
-  calculateEconomics,
 } from "./conversion";
 import { normalizeFormula } from "./utils";
 
@@ -290,33 +286,3 @@ export function calculateSystemThermodynamics(
   };
 }
 
-/**
- * Calculate economics for the full system.
- */
-export function calculateSystemEconomics(
-  system: ReactionSystem,
-  perReaction: Map<string, CalculationResult[]>,
-  prices: Map<string, Map<number, PriceEntry>>
-): SystemEconomics {
-  const econMap = new Map<string, EconomicsSummary>();
-  let systemReactantCost = 0;
-  let systemProductValue = 0;
-
-  for (const node of system.nodes) {
-    const results = perReaction.get(node.id);
-    if (!results) continue;
-
-    const reactionPrices = prices.get(node.id) ?? new Map();
-    const econ = calculateEconomics(results, reactionPrices);
-    econMap.set(node.id, econ);
-    systemReactantCost += econ.reactantCost;
-    systemProductValue += econ.productValue;
-  }
-
-  return {
-    perReaction: econMap,
-    systemReactantCost,
-    systemProductValue,
-    systemDelta: systemProductValue - systemReactantCost,
-  };
-}
