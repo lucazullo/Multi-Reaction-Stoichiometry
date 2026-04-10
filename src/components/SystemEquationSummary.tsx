@@ -66,100 +66,88 @@ export default function SystemEquationSummary({
   const rightSide = buildEquationSide(products, ratios);
   const excessSide = buildEquationSide(excess, ratios);
 
-  const handleDownloadPNG = async () => {
-    if (!panelRef.current) return;
-    try {
-      const el = panelRef.current;
-      const rect = el.getBoundingClientRect();
-      const scale = 2;
-      const width = rect.width * scale;
-      const height = rect.height * scale;
+  const handleDownloadPNG = () => {
+    // Draw the summary directly to a canvas using Canvas 2D API
+    const padding = 40;
+    const lineHeight = 24;
+    const titleSize = 20;
+    const bodySize = 14;
+    const monoSize = 16;
+    const equationSize = 22;
 
-      // Clone the element's HTML and inline all computed styles
-      const clone = el.cloneNode(true) as HTMLElement;
-      const allOriginal = el.querySelectorAll("*");
-      const allCloned = clone.querySelectorAll("*");
+    // Build text lines
+    const lines: Array<{ text: string; size: number; font: string; color: string; bold?: boolean; y?: number }> = [];
 
-      // Inline computed styles on the clone
-      const rootStyles = window.getComputedStyle(el);
-      clone.style.cssText = rootStyles.cssText;
-      clone.style.width = rect.width + "px";
-      clone.style.height = rect.height + "px";
+    lines.push({ text: "Overall System Equation", size: titleSize, font: "sans-serif", color: "#1f2937", bold: true });
+    lines.push({ text: "", size: 8, font: "sans-serif", color: "" }); // spacer
+    lines.push({ text: `${leftSide}  \u2192  ${rightSide}`, size: equationSize, font: "monospace", color: "#1f2937" });
+    lines.push({ text: "", size: 12, font: "sans-serif", color: "" }); // spacer
 
-      allOriginal.forEach((orig, i) => {
-        const computed = window.getComputedStyle(orig);
-        (allCloned[i] as HTMLElement).style.cssText = computed.cssText;
-      });
-
-      // Serialize to SVG foreignObject
-      const serializer = new XMLSerializer();
-      const htmlStr = serializer.serializeToString(clone);
-
-      const svg = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-          <foreignObject width="${rect.width}" height="${rect.height}"
-            style="transform: scale(${scale}); transform-origin: top left;">
-            <div xmlns="http://www.w3.org/1999/xhtml">${htmlStr}</div>
-          </foreignObject>
-        </svg>`;
-
-      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-      const svgUrl = URL.createObjectURL(svgBlob);
-
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(img, 0, 0, width, height);
-        URL.revokeObjectURL(svgUrl);
-
-        canvas.toBlob((blob) => {
-          if (!blob) return;
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "reaction-system-summary.png";
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, "image/png");
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(svgUrl);
-        // Fallback: copy as text
-        const text = el.innerText;
-        const blob = new Blob([text], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "reaction-system-summary.txt";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      };
-      img.src = svgUrl;
-    } catch (err) {
-      console.error("PNG export error:", err);
-      // Fallback: download as text
-      if (panelRef.current) {
-        const text = panelRef.current.innerText;
-        const blob = new Blob([text], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "reaction-system-summary.txt";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }
+    if (excess.length > 0) {
+      const excessText = excess.map((e) => { const c = ratios.get(e.formula) ?? ""; return `${c}${e.formula}`; }).join(", ");
+      lines.push({ text: `Excess:  ${excessText}`, size: bodySize, font: "sans-serif", color: "#b45309" });
     }
+
+    if (intermediates.length > 0) {
+      lines.push({ text: `Intermediates (cancelled):  ${intermediates.map((i) => i.formula).join(", ")}`, size: bodySize, font: "sans-serif", color: "#6b7280" });
+    }
+
+    lines.push({ text: "", size: 16, font: "sans-serif", color: "" }); // spacer
+    lines.push({ text: "Individual Reactions", size: titleSize - 4, font: "sans-serif", color: "#1f2937", bold: true });
+    lines.push({ text: "", size: 4, font: "sans-serif", color: "" }); // spacer
+
+    nodes.forEach((node, i) => {
+      lines.push({ text: `${i + 1}.  ${node.reaction.equation}`, size: monoSize, font: "monospace", color: "#374151" });
+    });
+
+    // Calculate canvas size
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+
+    let maxWidth = 0;
+    let totalHeight = padding * 2;
+    for (const line of lines) {
+      ctx.font = `${line.bold ? "bold " : ""}${line.size}px ${line.font}`;
+      const w = ctx.measureText(line.text).width;
+      if (w > maxWidth) maxWidth = w;
+      totalHeight += line.size + 8;
+    }
+
+    canvas.width = Math.max(maxWidth + padding * 2, 600);
+    canvas.height = totalHeight;
+
+    // Draw background
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw border
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = 2;
+    ctx.roundRect(4, 4, canvas.width - 8, canvas.height - 8, 12);
+    ctx.stroke();
+
+    // Draw text
+    let y = padding + 4;
+    for (const line of lines) {
+      if (!line.text) { y += line.size; continue; }
+      ctx.font = `${line.bold ? "bold " : ""}${line.size}px ${line.font}`;
+      ctx.fillStyle = line.color;
+      ctx.fillText(line.text, padding, y + line.size);
+      y += line.size + 8;
+    }
+
+    // Download
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reaction-system-summary.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, "image/png");
   };
 
   return (
