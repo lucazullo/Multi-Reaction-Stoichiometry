@@ -69,24 +69,96 @@ export default function SystemEquationSummary({
   const handleDownloadPNG = async () => {
     if (!panelRef.current) return;
     try {
-      // Dynamic import to avoid SSR issues
-      const html2canvasModule = await import("html2canvas");
-      const html2canvas = html2canvasModule.default ?? html2canvasModule;
-      const canvas = await html2canvas(panelRef.current, {
-        backgroundColor: "#ffffff",
-        scale: 2,
-        useCORS: true,
+      const el = panelRef.current;
+      const rect = el.getBoundingClientRect();
+      const scale = 2;
+      const width = rect.width * scale;
+      const height = rect.height * scale;
+
+      // Clone the element's HTML and inline all computed styles
+      const clone = el.cloneNode(true) as HTMLElement;
+      const allOriginal = el.querySelectorAll("*");
+      const allCloned = clone.querySelectorAll("*");
+
+      // Inline computed styles on the clone
+      const rootStyles = window.getComputedStyle(el);
+      clone.style.cssText = rootStyles.cssText;
+      clone.style.width = rect.width + "px";
+      clone.style.height = rect.height + "px";
+
+      allOriginal.forEach((orig, i) => {
+        const computed = window.getComputedStyle(orig);
+        (allCloned[i] as HTMLElement).style.cssText = computed.cssText;
       });
-      const dataUrl = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = "reaction-system-summary.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+
+      // Serialize to SVG foreignObject
+      const serializer = new XMLSerializer();
+      const htmlStr = serializer.serializeToString(clone);
+
+      const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+          <foreignObject width="${rect.width}" height="${rect.height}"
+            style="transform: scale(${scale}); transform-origin: top left;">
+            <div xmlns="http://www.w3.org/1999/xhtml">${htmlStr}</div>
+          </foreignObject>
+        </svg>`;
+
+      const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(svgUrl);
+
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "reaction-system-summary.png";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, "image/png");
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(svgUrl);
+        // Fallback: copy as text
+        const text = el.innerText;
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "reaction-system-summary.txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+      img.src = svgUrl;
     } catch (err) {
       console.error("PNG export error:", err);
-      alert("Failed to export PNG. Please try again.");
+      // Fallback: download as text
+      if (panelRef.current) {
+        const text = panelRef.current.innerText;
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "reaction-system-summary.txt";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     }
   };
 
