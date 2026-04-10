@@ -100,9 +100,14 @@ export interface SubstanceTotals {
   totalGrams: number;
   totalKilograms: number;
   totalPounds: number;
+  totalTons: number;      // short tons (US), 1 ton = 907.185 kg
+  totalTonnes: number;    // metric tonnes, 1 tonne = 1000 kg
+  totalLiters: number | null;  // only for liquids
+  totalGallons: number | null; // only for liquids
+  isLiquid: boolean;
   produced: number; // total moles produced across all reactions
   consumed: number; // total moles consumed across all reactions
-  note?: string; // e.g. "Excess from Rxn 1 → Rxn 2 link (20% unused)"
+  note?: string;
 }
 
 export interface SystemCalculationResult {

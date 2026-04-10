@@ -174,12 +174,19 @@ function aggregateSubstances(
   const consumed = new Map<string, number>();
   const nameMap = new Map<string, string>();
   const molarMassMap = new Map<string, number>();
+  const liquidInfo = new Map<string, { isLiquid: boolean; density: number | null }>();
 
   for (const [, results] of perReaction) {
     for (const r of results) {
       const key = normalizeFormula(r.substance.formula);
       nameMap.set(key, r.substance.name);
       molarMassMap.set(key, r.substance.molarMass);
+      if (!liquidInfo.has(key)) {
+        liquidInfo.set(key, {
+          isLiquid: r.substance.state === "liquid" && r.substance.density !== null,
+          density: r.substance.density,
+        });
+      }
 
       if (r.substance.role === "reactant") {
         consumed.set(key, (consumed.get(key) ?? 0) + r.moles);
@@ -232,6 +239,9 @@ function aggregateSubstances(
 
     const netMoles = Math.abs(net);
     const netGrams = netMoles * molarMass;
+    const liq = liquidInfo.get(formula);
+    const isLiquid = liq?.isLiquid ?? false;
+    const density = liq?.density ?? null;
 
     totals.push({
       formula,
@@ -241,6 +251,11 @@ function aggregateSubstances(
       totalGrams: netGrams,
       totalKilograms: netGrams / 1000,
       totalPounds: netGrams / 453.592,
+      totalTons: netGrams / 907185,      // short ton = 907,185 g
+      totalTonnes: netGrams / 1000000,   // metric tonne = 1,000,000 g
+      totalLiters: isLiquid && density ? netGrams / density / 1000 : null,
+      totalGallons: isLiquid && density ? netGrams / density / 3785.41 : null,
+      isLiquid,
       produced: prod,
       consumed: cons,
       note,

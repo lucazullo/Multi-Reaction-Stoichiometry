@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { AmountUnit, SubstanceTotals, SystemEconLine, SystemEconomics } from "@/lib/types";
+import type { SubstanceTotals, SystemEconLine, SystemEconomics } from "@/lib/types";
 import { METHANE_KG_PER_MMBTU } from "@/lib/constants";
 import { normalizeFormula } from "@/lib/utils";
-import UnitSelect from "./UnitSelect";
 
 export type SavedPrices = Array<{ value: string; unit: string }>;
 
@@ -17,8 +16,7 @@ interface SystemEconomicsPanelProps {
 
 const PRICEABLE_ROLES = new Set(["net-reactant", "net-product", "excess"]);
 
-// Extended unit type to include MMBTU
-type PriceUnit = AmountUnit | "MMBTU";
+type PriceUnit = "mol" | "g" | "kg" | "lb" | "ton" | "tonne" | "L" | "gal" | "MMBTU";
 
 function isMethane(formula: string): boolean {
   const norm = normalizeFormula(formula);
@@ -31,9 +29,18 @@ function getQuantityForUnit(t: SubstanceTotals, unit: PriceUnit): number {
     case "g": return t.totalGrams;
     case "kg": return t.totalKilograms;
     case "lb": return t.totalPounds;
+    case "ton": return t.totalTons;
+    case "tonne": return t.totalTonnes;
+    case "L": return t.totalLiters ?? 0;
+    case "gal": return t.totalGallons ?? 0;
     case "MMBTU": return t.totalKilograms / METHANE_KG_PER_MMBTU;
     default: return 0;
   }
+}
+
+function defaultUnit(t: SubstanceTotals): PriceUnit {
+  if (isMethane(t.formula)) return "MMBTU";
+  return "kg";
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -60,10 +67,7 @@ export default function SystemEconomicsPanel({
     if (initialPrices && initialPrices.length === priceableItems.length) {
       return initialPrices.map((p) => ({ value: p.value, unit: p.unit as PriceUnit }));
     }
-    return priceableItems.map((t) => ({
-      value: "",
-      unit: isMethane(t.formula) ? "MMBTU" as PriceUnit : "kg" as PriceUnit,
-    }));
+    return priceableItems.map((t) => ({ value: "", unit: defaultUnit(t) }));
   });
 
   const updatePrices = (next: Array<{ value: string; unit: PriceUnit }>) => {
@@ -99,9 +103,6 @@ export default function SystemEconomicsPanel({
         productValue += totalValue;
       }
 
-      // Store the display unit — cast MMBTU back to AmountUnit for the type
-      const displayUnit = prices[i].unit === "MMBTU" ? "kg" as AmountUnit : prices[i].unit as AmountUnit;
-
       return {
         formula: t.formula,
         name: t.name,
@@ -111,17 +112,12 @@ export default function SystemEconomicsPanel({
         quantityKg: t.totalKilograms,
         quantityLb: t.totalPounds,
         pricePerUnit: hasPrice ? parsed : null,
-        priceUnit: displayUnit,
+        priceUnit: prices[i].unit as string as import("@/lib/types").AmountUnit,
         totalValue,
       };
     });
 
-    onCalculate({
-      perSubstance,
-      feedstockCost,
-      productValue,
-      delta: productValue - feedstockCost,
-    });
+    onCalculate({ perSubstance, feedstockCost, productValue, delta: productValue - feedstockCost });
   };
 
   return (
@@ -133,6 +129,7 @@ export default function SystemEconomicsPanel({
       <div className="space-y-3">
         {priceableItems.map((t, i) => {
           const methane = isMethane(t.formula);
+          const liquid = t.isLiquid;
           return (
             <div key={t.formula} className="flex items-center gap-3">
               <div className="w-52 flex-shrink-0 flex items-center gap-2">
@@ -154,31 +151,33 @@ export default function SystemEconomicsPanel({
                   className="w-28 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
                 />
                 <span className="text-sm text-gray-500">per</span>
-                {methane ? (
-                  <select
-                    value={prices[i].unit}
-                    onChange={(e) => handleUnitChange(i, e.target.value as PriceUnit)}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
-                  >
+                <select
+                  value={prices[i].unit}
+                  onChange={(e) => handleUnitChange(i, e.target.value as PriceUnit)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                >
+                  {methane && (
                     <optgroup label="Energy">
                       <option value="MMBTU">MMBTU</option>
                     </optgroup>
-                    <optgroup label="Amount">
-                      <option value="mol">Moles (mol)</option>
+                  )}
+                  <optgroup label="Amount">
+                    <option value="mol">Moles (mol)</option>
+                  </optgroup>
+                  <optgroup label="Mass">
+                    <option value="g">Grams (g)</option>
+                    <option value="kg">Kilograms (kg)</option>
+                    <option value="lb">Pounds (lb)</option>
+                    <option value="ton">Short Ton (US)</option>
+                    <option value="tonne">Metric Tonne</option>
+                  </optgroup>
+                  {liquid && (
+                    <optgroup label="Volume">
+                      <option value="L">Liters (L)</option>
+                      <option value="gal">Gallons (gal)</option>
                     </optgroup>
-                    <optgroup label="Mass">
-                      <option value="g">Grams (g)</option>
-                      <option value="kg">Kilograms (kg)</option>
-                      <option value="lb">Pounds (lb)</option>
-                    </optgroup>
-                  </select>
-                ) : (
-                  <UnitSelect
-                    value={prices[i].unit as AmountUnit}
-                    onChange={(unit) => handleUnitChange(i, unit)}
-                    allowVolume={false}
-                  />
-                )}
+                  )}
+                </select>
               </div>
             </div>
           );

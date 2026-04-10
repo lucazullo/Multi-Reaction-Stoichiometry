@@ -177,7 +177,7 @@ export default function HelpModal({ onClose }: HelpModalProps) {
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase">Pricing</p>
-                <p>$/mol, $/g, $/kg, $/lb, $/MMBTU (methane)</p>
+                <p>$/mol, $/g, $/kg, $/lb, $/ton, $/tonne, $/L, $/gal (liquids), $/MMBTU (methane)</p>
               </div>
             </div>
           </section>
@@ -186,6 +186,7 @@ export default function HelpModal({ onClose }: HelpModalProps) {
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Tips</h3>
             <ul className="list-disc list-inside space-y-1">
+              <li>Use the <strong>+ insert</strong> buttons between reaction cards to add a reaction at a specific position in the sequence.</li>
               <li>Be specific in reaction descriptions — include reactant and product names.</li>
               <li>Use the fraction field in series links to model partial conversions or splits.</li>
               <li>Check the System Totals tab for excess/deficit warnings that indicate stoichiometric imbalances.</li>

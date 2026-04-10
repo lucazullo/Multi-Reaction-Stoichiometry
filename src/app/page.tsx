@@ -73,6 +73,9 @@ export default function Home() {
 
   // --- Handlers ---
 
+  // insertAt: index to insert before, undefined = append at end
+  const [insertAtIndex, setInsertAtIndex] = useState<number | null>(null);
+
   const handleAddReaction = async (description: string) => {
     setLoading(true);
     setError(null);
@@ -96,7 +99,16 @@ export default function Home() {
         label: description,
       };
 
-      setSystem((prev) => ({ ...prev, nodes: [...prev.nodes, node] }));
+      setSystem((prev) => {
+        const nodes = [...prev.nodes];
+        if (insertAtIndex !== null && insertAtIndex >= 0 && insertAtIndex <= nodes.length) {
+          nodes.splice(insertAtIndex, 0, node);
+        } else {
+          nodes.push(node);
+        }
+        return { ...prev, nodes };
+      });
+      setInsertAtIndex(null);
       // Clear previous results when adding new reaction
       setSystemResult(null);
       setSystemThermo(null);
@@ -277,15 +289,38 @@ export default function Home() {
 
         {error && <ErrorMessage message={error} />}
 
-        {/* Reaction Cards + Links */}
+        {/* Reaction Cards + Links + Insert buttons */}
         {system.nodes.length > 0 && (
           <section className="space-y-2">
             {system.nodes.map((node, i) => {
-              // Find links that go INTO this reaction
               const incomingLinks = system.links.filter((l) => l.toReactionId === node.id);
 
               return (
                 <div key={node.id}>
+                  {/* Insert-before button */}
+                  {insertAtIndex === i ? (
+                    <div className="rounded-xl border-2 border-dashed border-teal-300 bg-teal-50 p-4 mb-2">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-teal-700">Insert reaction before Reaction {i + 1}</p>
+                        <button onClick={() => setInsertAtIndex(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                      </div>
+                      <ReactionInput onSubmit={handleAddReaction} loading={loading} />
+                    </div>
+                  ) : (
+                    <div className="flex justify-center py-1">
+                      <button
+                        onClick={() => setInsertAtIndex(i)}
+                        className="flex items-center gap-1 rounded-full border border-dashed border-gray-300 bg-white px-3 py-0.5 text-xs text-gray-400 transition hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50"
+                        title={`Insert reaction before Reaction ${i + 1}`}
+                      >
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        insert
+                      </button>
+                    </div>
+                  )}
+
                   {incomingLinks.map((link) => (
                     <LinkBadge key={link.id} link={link} nodes={system.nodes} onDelete={handleDeleteLink} />
                   ))}
@@ -293,12 +328,6 @@ export default function Home() {
                 </div>
               );
             })}
-
-            {/* Show outgoing links from last reaction that don't point to any shown reaction */}
-            {system.links
-              .filter((l) => !system.nodes.some((n) => n.id === l.toReactionId && system.nodes.indexOf(n) > system.nodes.findIndex((nn) => nn.id === l.fromReactionId)))
-              .filter((l) => !system.links.some((other) => other.toReactionId === l.toReactionId && other !== l))
-              .length === 0 && null}
           </section>
         )}
 
@@ -507,7 +536,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.03 — April 2026</p>
+        <p>Version 1.04 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}

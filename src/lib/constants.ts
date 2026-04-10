@@ -21,5 +21,9 @@ export const UNIT_LABELS: Record<string, string> = {
   MMBTU: "MMBTU",
 };
 
+// Weight conversions
+export const KG_PER_SHORT_TON = 907.185;  // US short ton
+export const KG_PER_METRIC_TONNE = 1000;  // metric tonne
+
 // Methane higher heating value: 1 MMBTU = 19.01 kg CH₄ at standard conditions
 export const METHANE_KG_PER_MMBTU = 19.01;
