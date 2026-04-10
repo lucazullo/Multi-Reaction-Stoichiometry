@@ -37,6 +37,12 @@ import SystemEconomicsPanel from "@/components/SystemEconomicsPanel";
 import SystemEconomicsDisplay from "@/components/SystemEconomicsDisplay";
 import DownloadButton from "@/components/DownloadButton";
 import ErrorMessage from "@/components/ErrorMessage";
+import SessionManager from "@/components/SessionManager";
+import {
+  createSnapshot,
+  saveSession,
+  loadSession,
+} from "@/lib/session-storage";
 
 let nextNodeId = 0;
 let nextLinkId = 0;
@@ -154,6 +160,41 @@ export default function Home() {
     nextLinkId = 0;
   };
 
+  // --- Save/Load ---
+
+  const handleSaveSession = (name: string) => {
+    const snapshot = createSnapshot(
+      name,
+      system,
+      systemResult,
+      systemThermo,
+      systemEcon,
+      energyUnit,
+      startReactionId,
+      startInput,
+      nextNodeId,
+      nextLinkId
+    );
+    saveSession(snapshot);
+  };
+
+  const handleLoadSession = (id: string) => {
+    const snapshot = loadSession(id);
+    if (!snapshot) return;
+
+    setSystem(snapshot.system);
+    setSystemResult(snapshot.systemResult);
+    setSystemThermo(snapshot.systemThermo);
+    setSystemEcon(snapshot.systemEcon);
+    setEnergyUnit(snapshot.energyUnit);
+    setStartReactionId(snapshot.startReactionId);
+    setStartInput(snapshot.startInput);
+    setError(null);
+    setActiveTab("per-reaction");
+    nextNodeId = snapshot.nextNodeId;
+    nextLinkId = snapshot.nextLinkId;
+  };
+
   // --- Downloads ---
 
   const handleDownloadPerReaction = (reactionId: string) => {
@@ -189,6 +230,13 @@ export default function Home() {
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 space-y-4 px-4 py-8">
+        {/* Sessions */}
+        <SessionManager
+          hasContent={system.nodes.length > 0}
+          onSave={handleSaveSession}
+          onLoad={handleLoadSession}
+        />
+
         {/* Add Reaction */}
         <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
@@ -429,7 +477,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.01b — April 2026</p>
+        <p>Version 1.02 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
