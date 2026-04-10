@@ -18,4 +18,8 @@ export const UNIT_LABELS: Record<string, string> = {
   lb: "Pounds",
   L: "Liters",
   gal: "Gallons",
+  MMBTU: "MMBTU",
 };
+
+// Methane higher heating value: 1 MMBTU = 19.01 kg CH₄ at standard conditions
+export const METHANE_KG_PER_MMBTU = 19.01;

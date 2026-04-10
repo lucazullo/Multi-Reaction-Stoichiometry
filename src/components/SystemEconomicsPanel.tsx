@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { AmountUnit, SubstanceTotals, SystemEconLine, SystemEconomics } from "@/lib/types";
+import { METHANE_KG_PER_MMBTU } from "@/lib/constants";
+import { normalizeFormula } from "@/lib/utils";
 import UnitSelect from "./UnitSelect";
 
 interface SystemEconomicsPanelProps {
@@ -9,23 +11,25 @@ interface SystemEconomicsPanelProps {
   onCalculate: (economics: SystemEconomics) => void;
 }
 
-// Only feedstocks, products, and excess are priceable
 const PRICEABLE_ROLES = new Set(["net-reactant", "net-product", "excess"]);
 
-function getQuantityForUnit(t: SubstanceTotals, unit: AmountUnit): number {
+// Extended unit type to include MMBTU
+type PriceUnit = AmountUnit | "MMBTU";
+
+function isMethane(formula: string): boolean {
+  const norm = normalizeFormula(formula);
+  return norm === "CH4" || norm === "ch4";
+}
+
+function getQuantityForUnit(t: SubstanceTotals, unit: PriceUnit): number {
   switch (unit) {
     case "mol": return t.totalMoles;
     case "g": return t.totalGrams;
     case "kg": return t.totalKilograms;
     case "lb": return t.totalPounds;
+    case "MMBTU": return t.totalKilograms / METHANE_KG_PER_MMBTU;
     default: return 0;
   }
-}
-
-function fmt(n: number): string {
-  if (n === 0) return "$0.00";
-  if (Math.abs(n) < 0.01) return "$" + n.toExponential(2);
-  return "$" + n.toFixed(2);
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -46,8 +50,11 @@ export default function SystemEconomicsPanel({
 }: SystemEconomicsPanelProps) {
   const priceableItems = totals.filter((t) => PRICEABLE_ROLES.has(t.role));
 
-  const [prices, setPrices] = useState<Array<{ value: string; unit: AmountUnit }>>(
-    priceableItems.map(() => ({ value: "", unit: "kg" as AmountUnit }))
+  const [prices, setPrices] = useState<Array<{ value: string; unit: PriceUnit }>>(
+    priceableItems.map((t) => ({
+      value: "",
+      unit: isMethane(t.formula) ? "MMBTU" as PriceUnit : "kg" as PriceUnit,
+    }))
   );
 
   const handlePriceChange = (index: number, value: string) => {
@@ -58,7 +65,7 @@ export default function SystemEconomicsPanel({
     });
   };
 
-  const handleUnitChange = (index: number, unit: AmountUnit) => {
+  const handleUnitChange = (index: number, unit: PriceUnit) => {
     setPrices((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], unit };
@@ -79,9 +86,11 @@ export default function SystemEconomicsPanel({
       if (t.role === "net-reactant") {
         feedstockCost += totalValue;
       } else {
-        // net-product and excess both count as value
         productValue += totalValue;
       }
+
+      // Store the display unit — cast MMBTU back to AmountUnit for the type
+      const displayUnit = prices[i].unit === "MMBTU" ? "kg" as AmountUnit : prices[i].unit as AmountUnit;
 
       return {
         formula: t.formula,
@@ -92,7 +101,7 @@ export default function SystemEconomicsPanel({
         quantityKg: t.totalKilograms,
         quantityLb: t.totalPounds,
         pricePerUnit: hasPrice ? parsed : null,
-        priceUnit: prices[i].unit,
+        priceUnit: displayUnit,
         totalValue,
       };
     });
@@ -112,35 +121,58 @@ export default function SystemEconomicsPanel({
       </p>
 
       <div className="space-y-3">
-        {priceableItems.map((t, i) => (
-          <div key={t.formula} className="flex items-center gap-3">
-            <div className="w-52 flex-shrink-0 flex items-center gap-2">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_STYLES[t.role] ?? ""}`}>
-                {ROLE_LABELS[t.role] ?? t.role}
-              </span>
-              <span className="text-sm font-semibold text-gray-700">{t.formula}</span>
-              <span className="text-xs text-gray-400">({t.name})</span>
+        {priceableItems.map((t, i) => {
+          const methane = isMethane(t.formula);
+          return (
+            <div key={t.formula} className="flex items-center gap-3">
+              <div className="w-52 flex-shrink-0 flex items-center gap-2">
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_STYLES[t.role] ?? ""}`}>
+                  {ROLE_LABELS[t.role] ?? t.role}
+                </span>
+                <span className="text-sm font-semibold text-gray-700">{t.formula}</span>
+                <span className="text-xs text-gray-400">({t.name})</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-sm text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={prices[i].value}
+                  onChange={(e) => handlePriceChange(i, e.target.value)}
+                  placeholder="0.00"
+                  min="0"
+                  step="any"
+                  className="w-28 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                />
+                <span className="text-sm text-gray-500">per</span>
+                {methane ? (
+                  <select
+                    value={prices[i].unit}
+                    onChange={(e) => handleUnitChange(i, e.target.value as PriceUnit)}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
+                  >
+                    <optgroup label="Energy">
+                      <option value="MMBTU">MMBTU</option>
+                    </optgroup>
+                    <optgroup label="Amount">
+                      <option value="mol">Moles (mol)</option>
+                    </optgroup>
+                    <optgroup label="Mass">
+                      <option value="g">Grams (g)</option>
+                      <option value="kg">Kilograms (kg)</option>
+                      <option value="lb">Pounds (lb)</option>
+                    </optgroup>
+                  </select>
+                ) : (
+                  <UnitSelect
+                    value={prices[i].unit as AmountUnit}
+                    onChange={(unit) => handleUnitChange(i, unit)}
+                    allowVolume={false}
+                  />
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-sm text-gray-500">$</span>
-              <input
-                type="number"
-                value={prices[i].value}
-                onChange={(e) => handlePriceChange(i, e.target.value)}
-                placeholder="0.00"
-                min="0"
-                step="any"
-                className="w-28 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-teal-500 focus:ring-1 focus:ring-teal-500 focus:outline-none"
-              />
-              <span className="text-sm text-gray-500">per</span>
-              <UnitSelect
-                value={prices[i].unit}
-                onChange={(unit) => handleUnitChange(i, unit)}
-                allowVolume={false}
-              />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button

@@ -30,6 +30,7 @@ import LinkBadge from "@/components/LinkBadge";
 import LinkEditor from "@/components/LinkEditor";
 import SystemInput from "@/components/SystemInput";
 import SystemTotalsTable from "@/components/SystemTotalsTable";
+import SystemEquationSummary from "@/components/SystemEquationSummary";
 import ResultsTable from "@/components/ResultsTable";
 import ThermodynamicsDisplay from "@/components/ThermodynamicsDisplay";
 import SystemEconomicsPanel from "@/components/SystemEconomicsPanel";
@@ -320,10 +321,19 @@ export default function Home() {
 
             {/* System Totals tab */}
             {activeTab === "totals" && (
-              <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-lg font-semibold text-gray-800">System Totals</h2>
-                <SystemTotalsTable totals={systemResult.totals} />
-              </section>
+              <div className="space-y-4">
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <SystemEquationSummary
+                    totals={systemResult.totals}
+                    nodes={system.nodes}
+                  />
+                </section>
+
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <h2 className="mb-4 text-lg font-semibold text-gray-800">Detailed Mass Balance</h2>
+                  <SystemTotalsTable totals={systemResult.totals} />
+                </section>
+              </div>
             )}
 
             {/* Thermodynamics tab */}
