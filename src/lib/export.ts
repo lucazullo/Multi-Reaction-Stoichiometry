@@ -153,14 +153,76 @@ export function generateFullCSV(
 
 // --- Multi-reaction system CSV ---
 
-function generateTotalsCSV(totals: SubstanceTotals[]): string {
+export function generateTotalsCSV(totals: SubstanceTotals[]): string {
   const rows: string[] = [];
-  rows.push(["Substance", "Formula", "Net Role", "Moles", "Grams", "Kilograms", "Pounds"].map(esc).join(","));
+  rows.push(["Substance", "Formula", "Net Role", "Produced (mol)", "Consumed (mol)", "Net (mol)", "Net (g)", "Net (kg)", "Net (lb)"].map(esc).join(","));
   for (const t of totals) {
     rows.push(
-      [t.name, plainFormula(t.formula), t.role, fmt(t.totalMoles), fmt(t.totalGrams), fmt(t.totalKilograms), fmt(t.totalPounds)]
+      [t.name, plainFormula(t.formula), t.role, fmt(t.produced), fmt(t.consumed), fmt(t.totalMoles), fmt(t.totalGrams), fmt(t.totalKilograms), fmt(t.totalPounds)]
         .map(esc).join(",")
     );
+  }
+  return rows.join("\n");
+}
+
+export function generateSystemEconCSV(econ: SystemEconomics): string {
+  const rows: string[] = [];
+  rows.push(["Substance", "Formula", "Role", "Net Quantity (kg)", "Price/Unit", "Unit", "Total Cost/Price ($)"].map(esc).join(","));
+  for (const e of econ.perSubstance) {
+    rows.push([
+      e.name, plainFormula(e.formula), e.role,
+      fmt(e.quantityKg),
+      e.pricePerUnit !== null ? fmt(e.pricePerUnit) : "",
+      e.pricePerUnit !== null ? `$/${e.priceUnit}` : "",
+      fmt(e.totalValue),
+    ].map(esc).join(","));
+  }
+  rows.push("");
+  rows.push(`Total Feedstock Cost ($),${fmt(econ.feedstockCost)}`);
+  rows.push(`Total Product/Excess Value ($),${fmt(econ.productValue)}`);
+  rows.push(`Net Delta ($),${fmt(econ.delta)}`);
+  return rows.join("\n");
+}
+
+export function generateSystemThermoSummaryCSV(
+  thermo: SystemThermodynamics,
+  eu: EnergyUnit,
+  selectedResult?: { substance: { formula: string }; moles: number; grams: number; kilograms: number; pounds: number } | null
+): string {
+  const rows: string[] = [];
+  const conv = eu === "BTU" ? KJ_TO_BTU : 1;
+  const label = thermo.isExothermic ? "Exothermic" : "Endothermic";
+  rows.push(`System Reaction Type,${label}`);
+  rows.push(`Total ΔH (${eu}),${fmt(thermo.totalDeltaH * conv)}`);
+
+  if (selectedResult) {
+    const sel = selectedResult;
+    const name = plainFormula(sel.substance.formula);
+    rows.push("");
+    rows.push(`Specific Energy per unit of ${name}`);
+    if (sel.moles > 0) rows.push(`${eu}/mol,${fmt(thermo.totalDeltaH / sel.moles * conv)}`);
+    if (sel.grams > 0) rows.push(`${eu}/g,${fmt(thermo.totalDeltaH / sel.grams * conv)}`);
+    if (sel.kilograms > 0) rows.push(`${eu}/kg,${fmt(thermo.totalDeltaH / sel.kilograms * conv)}`);
+    if (sel.pounds > 0) rows.push(`${eu}/lb,${fmt(thermo.totalDeltaH / sel.pounds * conv)}`);
+  }
+  return rows.join("\n");
+}
+
+export function generatePropertiesCSV(
+  totals: SubstanceTotals[],
+  substanceData: Array<{ formula: string; molarMass: number; state: string; densityLiquid: number | null; densityGas: number | null; hhv: number | null; lhv: number | null }>
+): string {
+  const rows: string[] = [];
+  rows.push(["Substance", "Formula", "Role", "State", "MW (g/mol)", "Density (kg/L or kg/m3)", "HHV (kJ/kg)", "LHV (kJ/kg)"].map(esc).join(","));
+  for (let i = 0; i < totals.length; i++) {
+    const t = totals[i];
+    const d = substanceData[i];
+    const density = d?.densityLiquid ?? (d?.densityGas ? d.densityGas * 0.001 : null);
+    rows.push([
+      t.name, plainFormula(t.formula), t.role, d?.state ?? "",
+      d ? fmt(d.molarMass) : "", density !== null ? fmt(density) : "",
+      d?.hhv !== null ? fmt(d?.hhv ?? null) : "", d?.lhv !== null ? fmt(d?.lhv ?? null) : "",
+    ].map(esc).join(","));
   }
   return rows.join("\n");
 }
@@ -209,20 +271,7 @@ export function generateSystemFullCSV(
   if (systemEcon) {
     sections.push("");
     sections.push("=== SYSTEM ECONOMICS ===");
-    sections.push(["Substance", "Formula", "Role", "Net Quantity (kg)", "Price/Unit", "Unit", "Total Cost/Price ($)"].map(esc).join(","));
-    for (const e of systemEcon.perSubstance) {
-      sections.push([
-        e.name, plainFormula(e.formula), e.role,
-        fmt(e.quantityKg),
-        e.pricePerUnit !== null ? fmt(e.pricePerUnit) : "",
-        e.pricePerUnit !== null ? `$/${e.priceUnit}` : "",
-        fmt(e.totalValue),
-      ].map(esc).join(","));
-    }
-    sections.push("");
-    sections.push(`Total Feedstock Cost ($),${fmt(systemEcon.feedstockCost)}`);
-    sections.push(`Total Product/Excess Value ($),${fmt(systemEcon.productValue)}`);
-    sections.push(`Net Delta ($),${fmt(systemEcon.delta)}`);
+    sections.push(generateSystemEconCSV(systemEcon));
   }
 
   // Links

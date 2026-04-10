@@ -95,7 +95,7 @@ export default function HelpModal({ onClose }: HelpModalProps) {
           {/* Results Tabs */}
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Results Tabs</h3>
-            <p>After calculating, four tabs appear:</p>
+            <p>After calculating, five tabs appear:</p>
             <ul className="list-disc list-inside space-y-2 mt-2">
               <li>
                 <strong>Per Reaction</strong> — Quantities for each individual reaction (moles, grams,
@@ -110,6 +110,18 @@ export default function HelpModal({ onClose }: HelpModalProps) {
                   <li><span className="text-gray-500 font-medium">Intermediate</span> — produced and fully consumed internally</li>
                   <li><span className="text-amber-700 font-medium">Excess</span> — produced more than consumed (byproduct)</li>
                   <li><span className="text-red-700 font-medium">Deficit</span> — consumed more than produced (additional input needed)</li>
+                </ul>
+              </li>
+              <li>
+                <strong>Properties</strong> — Physical properties for each substance: molecular weight,
+                density, Higher Heating Value (HHV), and Lower Heating Value (LHV). Each value has its
+                own unit selector so you can view different substances in different units.
+                <ul className="list-none ml-6 mt-1 space-y-0.5">
+                  <li><strong>Density</strong> — at standard conditions (25&#176;C, 1 atm for liquids;
+                    0&#176;C, 1 atm STP for gases). Units: kg/L, lb/ft&#179;, lb/L, lb/gal (liquids only).</li>
+                  <li><strong>HHV</strong> — Higher Heating Value (water condensed). Units: BTU/lb, MJ/kg,
+                    BTU/gal (liquids), MJ/L (liquids).</li>
+                  <li><strong>LHV</strong> — Lower Heating Value (water as vapor). Same unit options as HHV.</li>
                 </ul>
               </li>
               <li>
@@ -158,10 +170,10 @@ export default function HelpModal({ onClose }: HelpModalProps) {
           {/* Supported Units */}
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Supported Units</h3>
-            <div className="grid grid-cols-3 gap-2 mt-2">
+            <div className="grid grid-cols-2 gap-3 mt-2">
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase">Mass</p>
-                <p>Grams, Kilograms, Pounds</p>
+                <p>Grams, Kilograms, Pounds, Short Tons (US), Metric Tonnes</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase">Volume (liquids)</p>
@@ -176,10 +188,22 @@ export default function HelpModal({ onClose }: HelpModalProps) {
                 <p>kJ, BTU</p>
               </div>
               <div>
+                <p className="text-xs font-medium text-gray-500 uppercase">Density (std conditions)</p>
+                <p>kg/L, lb/ft&#179;, lb/L, lb/gal (liquids)</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500 uppercase">Heating Values</p>
+                <p>BTU/lb, MJ/kg, BTU/gal (liquids), MJ/L (liquids)</p>
+              </div>
+              <div className="col-span-2">
                 <p className="text-xs font-medium text-gray-500 uppercase">Pricing</p>
                 <p>$/mol, $/g, $/kg, $/lb, $/ton, $/tonne, $/L, $/gal (liquids), $/MMBTU (methane)</p>
               </div>
             </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Note: All densities are at standard conditions — 25&#176;C and 1 atm for liquids,
+              0&#176;C and 1 atm (STP) for gases.
+            </p>
           </section>
 
           {/* Tips */}

@@ -21,9 +21,14 @@ import {
   generateThermodynamicsCSV,
   generateEconomicsCSV,
   generateFullCSV,
+  generateTotalsCSV,
   generateSystemFullCSV,
+  generateSystemEconCSV,
+  generateSystemThermoSummaryCSV,
+  generatePropertiesCSV,
   downloadCSV,
 } from "@/lib/export";
+import { normalizeFormula } from "@/lib/utils";
 import ReactionInput from "@/components/ReactionInput";
 import ReactionCard from "@/components/ReactionCard";
 import LinkBadge from "@/components/LinkBadge";
@@ -35,6 +40,7 @@ import ResultsTable from "@/components/ResultsTable";
 import ThermodynamicsDisplay from "@/components/ThermodynamicsDisplay";
 import SystemEconomicsPanel from "@/components/SystemEconomicsPanel";
 import SystemEconomicsDisplay from "@/components/SystemEconomicsDisplay";
+import PhysicalPropertiesTable from "@/components/PhysicalPropertiesTable";
 import DownloadButton from "@/components/DownloadButton";
 import ErrorMessage from "@/components/ErrorMessage";
 import HelpModal from "@/components/HelpModal";
@@ -69,7 +75,7 @@ export default function Home() {
   const [savedPrices, setSavedPrices] = useState<Array<{ value: string; unit: string }>>([]);
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics">("per-reaction");
+  const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics" | "properties">("per-reaction");
 
   // --- Handlers ---
 
@@ -378,6 +384,7 @@ export default function Home() {
                 [
                   ["per-reaction", "Per Reaction"],
                   ["totals", "System Totals"],
+                  ["properties", "Properties"],
                   ["thermo", "Thermodynamics"],
                   ["economics", "Economics"],
                 ] as const
@@ -435,7 +442,10 @@ export default function Home() {
                 </section>
 
                 <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                  <h2 className="mb-4 text-lg font-semibold text-gray-800">Detailed Mass Balance</h2>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-gray-800">Detailed Mass Balance</h2>
+                    <DownloadButton onClick={() => downloadCSV(generateTotalsCSV(systemResult.totals), "system-totals.csv")} />
+                  </div>
                   <SystemTotalsTable totals={systemResult.totals} />
                 </section>
               </div>
@@ -448,6 +458,12 @@ export default function Home() {
                 <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-lg font-semibold text-gray-800">System Thermodynamics</h2>
+                    <div className="flex items-center gap-2">
+                    <DownloadButton onClick={() => {
+                      const selResults = startReactionId ? systemResult.perReaction.get(startReactionId) : null;
+                      const selResult = selResults && startInput ? selResults[startInput.substanceIndex] : null;
+                      downloadCSV(generateSystemThermoSummaryCSV(systemThermo, energyUnit, selResult), "system-thermodynamics.csv");
+                    }} />
                     <div className="flex rounded-lg border border-gray-300 bg-white overflow-hidden text-sm">
                       <button
                         onClick={() => setEnergyUnit("kJ")}
@@ -457,6 +473,7 @@ export default function Home() {
                         onClick={() => setEnergyUnit("BTU")}
                         className={`px-3 py-1.5 font-medium transition ${energyUnit === "BTU" ? "bg-teal-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
                       >BTU</button>
+                    </div>
                     </div>
                   </div>
                   <div className={`rounded-lg p-4 ${systemThermo.isExothermic ? "bg-orange-50 border border-orange-200" : "bg-blue-50 border border-blue-200"}`}>
@@ -472,6 +489,29 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Specific energy per unit of selected substance */}
+                  {startReactionId && startInput && (() => {
+                    const selResults = systemResult.perReaction.get(startReactionId);
+                    const selResult = selResults?.[startInput.substanceIndex];
+                    if (!selResult) return null;
+                    const dH = systemThermo.totalDeltaH;
+                    const conv = energyUnit === "BTU" ? 0.947817 : 1;
+                    const fmtE = (n: number) => n === 0 ? "0" : Math.abs(n) >= 0.01 && Math.abs(n) < 1e6 ? n.toPrecision(4) : n.toExponential(3);
+                    return (
+                      <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        <p className="mb-2 text-sm font-medium text-gray-700">
+                          System energy per unit of <span className="font-semibold text-teal-700">{selResult.substance.formula}</span> ({selResult.substance.name}):
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-sm">
+                          {selResult.moles > 0 && <div className="flex justify-between"><span className="text-gray-500">{energyUnit}/mol:</span><span className="font-mono">{fmtE(dH / selResult.moles * conv)}</span></div>}
+                          {selResult.grams > 0 && <div className="flex justify-between"><span className="text-gray-500">{energyUnit}/g:</span><span className="font-mono">{fmtE(dH / selResult.grams * conv)}</span></div>}
+                          {selResult.kilograms > 0 && <div className="flex justify-between"><span className="text-gray-500">{energyUnit}/kg:</span><span className="font-mono">{fmtE(dH / selResult.kilograms * conv)}</span></div>}
+                          {selResult.pounds > 0 && <div className="flex justify-between"><span className="text-gray-500">{energyUnit}/lb:</span><span className="font-mono">{fmtE(dH / selResult.pounds * conv)}</span></div>}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </section>
 
                 {/* Per-reaction thermodynamics */}
@@ -482,9 +522,12 @@ export default function Home() {
                   const selIdx = node.id === startReactionId ? (startInput?.substanceIndex ?? 0) : 0;
                   return (
                     <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                      <h3 className="mb-4 text-sm font-semibold text-gray-600">
-                        Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
-                      </h3>
+                      <div className="mb-4 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-gray-600">
+                          Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                        </h3>
+                        <DownloadButton onClick={() => downloadCSV(generateThermodynamicsCSV(thermo, energyUnit, results[selIdx]), `thermo-rxn${i+1}.csv`)} />
+                      </div>
                       <ThermodynamicsDisplay
                         thermodynamics={thermo}
                         energyUnit={energyUnit}
@@ -495,6 +538,30 @@ export default function Home() {
                   );
                 })}
               </div>
+            )}
+
+            {/* Properties tab */}
+            {activeTab === "properties" && (
+              <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-800">Physical Properties</h2>
+                  <DownloadButton onClick={() => {
+                    const substMap = new Map<string, { formula: string; molarMass: number; state: string; densityLiquid: number | null; densityGas: number | null; hhv: number | null; lhv: number | null }>();
+                    for (const node of system.nodes) {
+                      for (const s of [...node.reaction.reactants, ...node.reaction.products]) {
+                        const key = normalizeFormula(s.formula);
+                        if (!substMap.has(key)) substMap.set(key, { formula: s.formula, molarMass: s.molarMass, state: s.state, densityLiquid: s.density, densityGas: s.densityGas ?? null, hhv: s.hhv ?? null, lhv: s.lhv ?? null });
+                      }
+                    }
+                    const data = systemResult.totals.map(t => substMap.get(normalizeFormula(t.formula)) ?? { formula: t.formula, molarMass: 0, state: "", densityLiquid: null, densityGas: null, hhv: null, lhv: null });
+                    downloadCSV(generatePropertiesCSV(systemResult.totals, data), "physical-properties.csv");
+                  }} />
+                </div>
+                <PhysicalPropertiesTable
+                  totals={systemResult.totals}
+                  system={system}
+                />
+              </section>
             )}
 
             {/* Economics tab */}
@@ -512,7 +579,10 @@ export default function Home() {
 
                 {systemEcon && (
                   <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                    <h2 className="mb-4 text-lg font-semibold text-gray-800">Cost Analysis</h2>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h2 className="text-lg font-semibold text-gray-800">Cost Analysis</h2>
+                      <DownloadButton onClick={() => downloadCSV(generateSystemEconCSV(systemEcon), "system-economics.csv")} />
+                    </div>
                     <SystemEconomicsDisplay economics={systemEcon} />
                   </section>
                 )}
@@ -536,7 +606,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.04 — April 2026</p>
+        <p>Version 1.06 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
