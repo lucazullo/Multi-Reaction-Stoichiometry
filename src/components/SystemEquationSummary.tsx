@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef } from "react";
-import html2canvas from "html2canvas";
 import type { ReactionNode, SubstanceTotals } from "@/lib/types";
 
 interface SystemEquationSummaryProps {
@@ -70,21 +69,24 @@ export default function SystemEquationSummary({
   const handleDownloadPNG = async () => {
     if (!panelRef.current) return;
     try {
+      // Dynamic import to avoid SSR issues
+      const html2canvasModule = await import("html2canvas");
+      const html2canvas = html2canvasModule.default ?? html2canvasModule;
       const canvas = await html2canvas(panelRef.current, {
         backgroundColor: "#ffffff",
         scale: 2,
+        useCORS: true,
       });
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "reaction-system-summary.png";
-        a.click();
-        URL.revokeObjectURL(url);
-      }, "image/png");
-    } catch {
-      // Fallback: alert user
+      const dataUrl = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "reaction-system-summary.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("PNG export error:", err);
+      alert("Failed to export PNG. Please try again.");
     }
   };
 
