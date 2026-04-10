@@ -428,8 +428,18 @@ export default function Home() {
         )}
       </main>
 
-      <footer className="border-t border-gray-100 py-4 text-center text-xs text-gray-400">
-        Powered by Claude AI for reaction parsing
+      <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
+        <p>Version 1.0 — April 2026</p>
+        <p>Powered by Claude AI for reaction parsing</p>
+        <p>
+          Questions or suggestions?{" "}
+          <a
+            href="mailto:lucazullo@gmail.com"
+            className="text-teal-600 hover:text-teal-700 underline"
+          >
+            lucazullo@gmail.com
+          </a>
+        </p>
       </footer>
     </>
   );
