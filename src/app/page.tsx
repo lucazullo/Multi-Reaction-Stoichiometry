@@ -37,6 +37,7 @@ import SystemEconomicsPanel from "@/components/SystemEconomicsPanel";
 import SystemEconomicsDisplay from "@/components/SystemEconomicsDisplay";
 import DownloadButton from "@/components/DownloadButton";
 import ErrorMessage from "@/components/ErrorMessage";
+import HelpModal from "@/components/HelpModal";
 import SessionManager from "@/components/SessionManager";
 import {
   createSnapshot,
@@ -53,6 +54,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showLinkEditor, setShowLinkEditor] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Calculation results
   const [systemResult, setSystemResult] = useState<SystemCalculationResult | null>(null);
@@ -228,7 +230,16 @@ export default function Home() {
 
   return (
     <>
-      <header className="bg-gradient-to-r from-slate-800 via-teal-900 to-slate-800 px-6 py-10 text-center text-white">
+      <header className="bg-gradient-to-r from-slate-800 via-teal-900 to-slate-800 px-6 py-10 text-center text-white relative">
+        <button
+          onClick={() => setShowHelp(true)}
+          className="absolute top-4 right-4 flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/20"
+        >
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+          </svg>
+          Help
+        </button>
         <h1 className="text-3xl font-bold tracking-tight">
           Multi-Reaction Stoichiometry Calculator
         </h1>
@@ -236,6 +247,8 @@ export default function Home() {
           Build parallel and sequential reaction systems. Calculate quantities, thermodynamics, and economics across the full chain.
         </p>
       </header>
+
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
 
       <main className="mx-auto w-full max-w-4xl flex-1 space-y-4 px-4 py-8">
         {/* Sessions */}
@@ -494,7 +507,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.02a — April 2026</p>
+        <p>Version 1.03 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
