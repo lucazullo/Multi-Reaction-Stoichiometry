@@ -62,6 +62,10 @@ export default function Home() {
   const [startReactionId, setStartReactionId] = useState<string | null>(null);
   const [startInput, setStartInput] = useState<CalculationInput | null>(null);
 
+  // Session tracking
+  const [currentSessionName, setCurrentSessionName] = useState<string | null>(null);
+  const [savedPrices, setSavedPrices] = useState<Array<{ value: string; unit: string }>>([]);
+
   // Active tab
   const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics">("per-reaction");
 
@@ -156,6 +160,8 @@ export default function Home() {
     setSystemThermo(null);
     setSystemEcon(null);
     setError(null);
+    setCurrentSessionName(null);
+    setSavedPrices([]);
     nextNodeId = 0;
     nextLinkId = 0;
   };
@@ -173,7 +179,8 @@ export default function Home() {
       startReactionId,
       startInput,
       nextNodeId,
-      nextLinkId
+      nextLinkId,
+      savedPrices
     );
     saveSession(snapshot);
   };
@@ -189,8 +196,9 @@ export default function Home() {
     setEnergyUnit(snapshot.energyUnit);
     setStartReactionId(snapshot.startReactionId);
     setStartInput(snapshot.startInput);
+    setSavedPrices(snapshot.savedPrices ?? []);
     setError(null);
-    setActiveTab("per-reaction");
+    setActiveTab(snapshot.systemResult ? "per-reaction" : "per-reaction");
     nextNodeId = snapshot.nextNodeId;
     nextLinkId = snapshot.nextLinkId;
   };
@@ -233,8 +241,10 @@ export default function Home() {
         {/* Sessions */}
         <SessionManager
           hasContent={system.nodes.length > 0}
+          currentSessionName={currentSessionName}
           onSave={handleSaveSession}
           onLoad={handleLoadSession}
+          onSessionLoaded={setCurrentSessionName}
         />
 
         {/* Add Reaction */}
@@ -308,7 +318,12 @@ export default function Home() {
             <h2 className="mb-4 text-lg font-semibold text-gray-800">
               {isSingleReaction ? "Calculate Quantities" : "Calculate System"}
             </h2>
-            <SystemInput nodes={system.nodes} onCalculate={handleCalculateSystem} />
+            <SystemInput
+              nodes={system.nodes}
+              onCalculate={handleCalculateSystem}
+              initialReactionId={startReactionId}
+              initialInput={startInput}
+            />
           </section>
         )}
 
@@ -448,6 +463,8 @@ export default function Home() {
                   <SystemEconomicsPanel
                     totals={systemResult.totals}
                     onCalculate={handleSystemEconomics}
+                    initialPrices={savedPrices.length > 0 ? savedPrices : undefined}
+                    onPricesChange={setSavedPrices}
                   />
                 </section>
 
@@ -477,7 +494,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.02 — April 2026</p>
+        <p>Version 1.02a — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}

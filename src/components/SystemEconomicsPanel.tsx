@@ -6,9 +6,13 @@ import { METHANE_KG_PER_MMBTU } from "@/lib/constants";
 import { normalizeFormula } from "@/lib/utils";
 import UnitSelect from "./UnitSelect";
 
+export type SavedPrices = Array<{ value: string; unit: string }>;
+
 interface SystemEconomicsPanelProps {
   totals: SubstanceTotals[];
   onCalculate: (economics: SystemEconomics) => void;
+  initialPrices?: SavedPrices;
+  onPricesChange?: (prices: SavedPrices) => void;
 }
 
 const PRICEABLE_ROLES = new Set(["net-reactant", "net-product", "excess"]);
@@ -47,30 +51,36 @@ const ROLE_STYLES: Record<string, string> = {
 export default function SystemEconomicsPanel({
   totals,
   onCalculate,
+  initialPrices,
+  onPricesChange,
 }: SystemEconomicsPanelProps) {
   const priceableItems = totals.filter((t) => PRICEABLE_ROLES.has(t.role));
 
-  const [prices, setPrices] = useState<Array<{ value: string; unit: PriceUnit }>>(
-    priceableItems.map((t) => ({
+  const [prices, setPrices] = useState<Array<{ value: string; unit: PriceUnit }>>(() => {
+    if (initialPrices && initialPrices.length === priceableItems.length) {
+      return initialPrices.map((p) => ({ value: p.value, unit: p.unit as PriceUnit }));
+    }
+    return priceableItems.map((t) => ({
       value: "",
       unit: isMethane(t.formula) ? "MMBTU" as PriceUnit : "kg" as PriceUnit,
-    }))
-  );
+    }));
+  });
+
+  const updatePrices = (next: Array<{ value: string; unit: PriceUnit }>) => {
+    setPrices(next);
+    onPricesChange?.(next.map((p) => ({ value: p.value, unit: p.unit })));
+  };
 
   const handlePriceChange = (index: number, value: string) => {
-    setPrices((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], value };
-      return next;
-    });
+    const next = [...prices];
+    next[index] = { ...next[index], value };
+    updatePrices(next);
   };
 
   const handleUnitChange = (index: number, unit: PriceUnit) => {
-    setPrices((prev) => {
-      const next = [...prev];
-      next[index] = { ...next[index], unit };
-      return next;
-    });
+    const next = [...prices];
+    next[index] = { ...next[index], unit };
+    updatePrices(next);
   };
 
   const handleCalculate = () => {

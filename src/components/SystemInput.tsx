@@ -1,19 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { AmountUnit, ReactionNode, CalculationInput } from "@/lib/types";
 import UnitSelect from "./UnitSelect";
 
 interface SystemInputProps {
   nodes: ReactionNode[];
   onCalculate: (startReactionId: string, input: CalculationInput) => void;
+  initialReactionId?: string | null;
+  initialInput?: CalculationInput | null;
 }
 
-export default function SystemInput({ nodes, onCalculate }: SystemInputProps) {
-  const [reactionId, setReactionId] = useState(nodes[0]?.id ?? "");
-  const [substanceIndex, setSubstanceIndex] = useState(0);
-  const [amount, setAmount] = useState("");
-  const [unit, setUnit] = useState<AmountUnit>("g");
+export default function SystemInput({
+  nodes,
+  onCalculate,
+  initialReactionId,
+  initialInput,
+}: SystemInputProps) {
+  const [reactionId, setReactionId] = useState(initialReactionId ?? nodes[0]?.id ?? "");
+  const [substanceIndex, setSubstanceIndex] = useState(initialInput?.substanceIndex ?? 0);
+  const [amount, setAmount] = useState(initialInput ? String(initialInput.amount) : "");
+  const [unit, setUnit] = useState<AmountUnit>(initialInput?.unit ?? "g");
+
+  // Restore values when initial props change (e.g., session load)
+  useEffect(() => {
+    if (initialReactionId) setReactionId(initialReactionId);
+    if (initialInput) {
+      setSubstanceIndex(initialInput.substanceIndex);
+      setAmount(String(initialInput.amount));
+      setUnit(initialInput.unit);
+    }
+  }, [initialReactionId, initialInput]);
 
   const selectedNode = nodes.find((n) => n.id === reactionId);
   const allSubstances = selectedNode

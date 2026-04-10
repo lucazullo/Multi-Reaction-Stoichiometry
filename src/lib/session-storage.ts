@@ -30,6 +30,7 @@ export interface SessionSnapshot {
   startInput: CalculationInput | null;
   nextNodeId: number;
   nextLinkId: number;
+  savedPrices?: Array<{ value: string; unit: string }>;
 }
 
 // Serialized versions with Map → entries array
@@ -56,6 +57,7 @@ export interface LoadedSession {
   startInput: CalculationInput | null;
   nextNodeId: number;
   nextLinkId: number;
+  savedPrices?: Array<{ value: string; unit: string }>;
 }
 
 // --- Keys ---
@@ -178,7 +180,9 @@ export function createSnapshot(
   startReactionId: string | null,
   startInput: CalculationInput | null,
   nextNodeId: number,
-  nextLinkId: number
+  nextLinkId: number,
+  savedPrices?: Array<{ value: string; unit: string }>,
+  existingId?: string
 ): SessionSnapshot {
   const equations = system.nodes
     .map((n) => n.reaction.equation)
@@ -188,7 +192,7 @@ export function createSnapshot(
 
   return {
     metadata: {
-      id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: existingId ?? `session-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name,
       savedAt: new Date().toISOString(),
       reactionCount: system.nodes.length,
@@ -207,5 +211,6 @@ export function createSnapshot(
     startInput,
     nextNodeId,
     nextLinkId,
+    savedPrices,
   };
 }
