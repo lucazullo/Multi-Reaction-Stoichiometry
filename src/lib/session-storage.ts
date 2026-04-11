@@ -187,6 +187,70 @@ export function deleteSession(id: string): void {
   localStorage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(sessions));
 }
 
+// --- File Export/Import ---
+
+/** Export a session as a JSON file download */
+export function exportSessionToFile(id: string): void {
+  const key = SESSION_PREFIX + id;
+  const raw = localStorage.getItem(key);
+  if (!raw) return;
+
+  const data = JSON.parse(raw);
+  const filename = `${(data.metadata?.name ?? "session").replace(/[^a-zA-Z0-9_-]/g, "_")}.stoich.json`;
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Import a session from a JSON file and save to localStorage.
+ *  Returns the session metadata on success, null on failure. */
+export function importSessionFromFile(file: File): Promise<SessionMetadata | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result as string);
+
+        // Validate basic structure
+        if (!data.metadata || !data.system || !data.system.nodes) {
+          resolve(null);
+          return;
+        }
+
+        // Assign a new ID to avoid collisions
+        const newId = `session-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        data.metadata.id = newId;
+        data.metadata.savedAt = new Date().toISOString();
+
+        // Migrate older formats
+        if (data.system) migrateSystem(data.system);
+
+        // Save to localStorage
+        const key = SESSION_PREFIX + newId;
+        localStorage.setItem(key, JSON.stringify(data));
+
+        // Update index
+        const sessions = listSessions();
+        sessions.unshift(data.metadata as SessionMetadata);
+        localStorage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(sessions));
+
+        resolve(data.metadata as SessionMetadata);
+      } catch {
+        resolve(null);
+      }
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsText(file);
+  });
+}
+
 // --- Snapshot Creation Helper ---
 
 export function createSnapshot(

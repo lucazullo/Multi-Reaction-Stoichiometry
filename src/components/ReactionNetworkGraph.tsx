@@ -20,10 +20,11 @@ import { normalizeFormula } from "@/lib/utils";
 
 interface ReactionNetworkGraphProps {
   system: ReactionSystem;
-  onDownloadPNG?: () => void;
 }
 
-// Custom node: reaction
+// --- Custom Nodes ---
+
+// Reaction: rectangle (teal border)
 function ReactionNodeComponent({ data }: { data: { label: string; equation: string; index: number; displayName?: string } }) {
   const title = data.displayName
     ? `Reaction ${data.index + 1} — ${data.displayName}`
@@ -33,48 +34,49 @@ function ReactionNodeComponent({ data }: { data: { label: string; equation: stri
       <Handle type="target" position={Position.Top} className="!bg-teal-500 !w-3 !h-3" />
       <div className="text-xs font-semibold text-teal-700 mb-1">{title}</div>
       <div className="text-xs font-mono text-gray-700 leading-snug break-words">{data.equation}</div>
-      <div className="text-[10px] text-gray-400 mt-1 truncate">{data.label}</div>
       <Handle type="source" position={Position.Bottom} className="!bg-teal-500 !w-3 !h-3" />
     </div>
   );
 }
 
-// Custom node: output product (leaving the system)
-function OutputNodeComponent({ data }: { data: { formula: string; name: string } }) {
+// Feedstock: blue oval
+function FeedstockNodeComponent({ data }: { data: { formula: string; name: string } }) {
   return (
-    <div className="rounded-lg border-2 border-green-400 bg-green-50 px-3 py-2 shadow-sm min-w-[100px]">
-      <Handle type="target" position={Position.Top} className="!bg-green-500 !w-2.5 !h-2.5" />
-      <div className="text-xs font-semibold text-green-700">{data.formula}</div>
-      <div className="text-[10px] text-green-600">{data.name}</div>
-      <div className="text-[9px] text-green-500 mt-0.5">product out</div>
+    <div className="flex items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50 px-5 py-2.5 shadow-sm min-w-[90px]">
+      <div className="text-center">
+        <div className="text-xs font-bold text-blue-700">{data.formula}</div>
+        <div className="text-[9px] text-blue-500">{data.name}</div>
+      </div>
+      <Handle type="source" position={Position.Bottom} className="!bg-blue-500 !w-2.5 !h-2.5" />
     </div>
   );
 }
 
-// Custom node: input feedstock (entering the system)
-function InputNodeComponent({ data }: { data: { formula: string; name: string } }) {
+// Product: green oval
+function ProductNodeComponent({ data }: { data: { formula: string; name: string } }) {
   return (
-    <div className="rounded-lg border-2 border-blue-400 bg-blue-50 px-3 py-2 shadow-sm min-w-[100px]">
-      <div className="text-xs font-semibold text-blue-700">{data.formula}</div>
-      <div className="text-[10px] text-blue-600">{data.name}</div>
-      <div className="text-[9px] text-blue-500 mt-0.5">feedstock in</div>
-      <Handle type="source" position={Position.Bottom} className="!bg-blue-500 !w-2.5 !h-2.5" />
+    <div className="flex items-center justify-center rounded-full border-2 border-green-500 bg-green-50 px-5 py-2.5 shadow-sm min-w-[90px]">
+      <Handle type="target" position={Position.Top} className="!bg-green-500 !w-2.5 !h-2.5" />
+      <div className="text-center">
+        <div className="text-xs font-bold text-green-700">{data.formula}</div>
+        <div className="text-[9px] text-green-500">{data.name}</div>
+      </div>
     </div>
   );
 }
 
 const nodeTypes: NodeTypes = {
   reaction: ReactionNodeComponent,
-  output: OutputNodeComponent,
-  input: InputNodeComponent,
+  feedstock: FeedstockNodeComponent,
+  product: ProductNodeComponent,
 };
 
 function buildGraph(system: ReactionSystem) {
   const { nodes, links } = system;
 
   // Build link lookup
-  const linkedProducts = new Set<string>(); // "nodeId:productIdx"
-  const linkedReactants = new Set<string>(); // "nodeId:reactantIdx"
+  const linkedProducts = new Set<string>();
+  const linkedReactants = new Set<string>();
   for (const link of links) {
     linkedProducts.add(`${link.fromReactionId}:${link.fromProductIndex}`);
     linkedReactants.add(`${link.toReactionId}:${link.toReactantIndex}`);
@@ -118,8 +120,9 @@ function buildGraph(system: ReactionSystem) {
   }
 
   const xSpacing = 320;
-  const ySpacing = 200;
+  const ySpacing = 220;
   const maxLevel = Math.max(...levels.values(), 0);
+  const centerX = 400;
 
   // --- Reaction nodes ---
   const graphNodes: Node[] = nodes.map((node) => {
@@ -132,8 +135,8 @@ function buildGraph(system: ReactionSystem) {
       id: node.id,
       type: "reaction",
       position: {
-        x: indexInGroup * xSpacing - groupWidth / 2 + 400,
-        y: level * ySpacing + 120,
+        x: indexInGroup * xSpacing - groupWidth / 2 + centerX,
+        y: level * ySpacing + 150,
       },
       data: {
         label: node.label.slice(0, 50),
@@ -144,6 +147,7 @@ function buildGraph(system: ReactionSystem) {
     };
   });
 
+  // --- Link edges (purple, between reactions) ---
   const graphEdges: Edge[] = links.map((link) => {
     const fromNode = nodes.find((n) => n.id === link.fromReactionId);
     const product = fromNode?.reaction.products[link.fromProductIndex];
@@ -164,85 +168,106 @@ function buildGraph(system: ReactionSystem) {
     };
   });
 
-  // --- Output nodes: products not linked downstream ---
-  let outputCount = 0;
-  for (const node of nodes) {
-    for (let pi = 0; pi < node.reaction.products.length; pi++) {
-      const key = `${node.id}:${pi}`;
-      if (linkedProducts.has(key)) continue; // linked to downstream
-
-      const product = node.reaction.products[pi];
-      const nodeLevel = levels.get(node.id) ?? 0;
-      const outputId = `output-${node.id}-${pi}`;
-
-      graphNodes.push({
-        id: outputId,
-        type: "output",
-        position: {
-          x: (graphNodes.find((n) => n.id === node.id)?.position.x ?? 400) + 150 + outputCount * 140,
-          y: (maxLevel + 1) * ySpacing + 120,
-        },
-        data: { formula: product.formula, name: product.name },
-      });
-
-      graphEdges.push({
-        id: `edge-${outputId}`,
-        source: node.id,
-        target: outputId,
-        label: product.formula,
-        style: { stroke: "#22c55e", strokeWidth: 1.5, strokeDasharray: "5 3" },
-        labelStyle: { fontSize: 9, fontFamily: "monospace", fill: "#16a34a" },
-        labelBgStyle: { fill: "#f0fdf4", fillOpacity: 0.9 },
-        labelBgPadding: [4, 2] as [number, number],
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#22c55e" },
-      });
-
-      outputCount++;
-    }
-  }
-
-  // --- Input nodes: reactants not linked from upstream ---
-  let inputCount = 0;
+  // --- Deduplicated feedstock nodes (blue ovals, top) ---
+  // Group unlinked reactants by normalized formula → single node per unique feedstock
+  const feedstockMap = new Map<string, { formula: string; name: string; targetReactions: string[] }>();
   for (const node of nodes) {
     for (let ri = 0; ri < node.reaction.reactants.length; ri++) {
-      const key = `${node.id}:${ri}`;
-      if (linkedReactants.has(key)) continue; // linked from upstream
-
+      if (linkedReactants.has(`${node.id}:${ri}`)) continue;
       const reactant = node.reaction.reactants[ri];
-      const inputId = `input-${node.id}-${ri}`;
-
-      graphNodes.push({
-        id: inputId,
-        type: "input",
-        position: {
-          x: (graphNodes.find((n) => n.id === node.id)?.position.x ?? 400) - 100 + inputCount * 140,
-          y: -80,
-        },
-        data: { formula: reactant.formula, name: reactant.name },
-      });
-
-      graphEdges.push({
-        id: `edge-${inputId}`,
-        source: inputId,
-        target: node.id,
-        label: reactant.formula,
-        style: { stroke: "#3b82f6", strokeWidth: 1.5, strokeDasharray: "5 3" },
-        labelStyle: { fontSize: 9, fontFamily: "monospace", fill: "#2563eb" },
-        labelBgStyle: { fill: "#eff6ff", fillOpacity: 0.9 },
-        labelBgPadding: [4, 2] as [number, number],
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
-      });
-
-      inputCount++;
+      const key = normalizeFormula(reactant.formula);
+      const existing = feedstockMap.get(key);
+      if (existing) {
+        if (!existing.targetReactions.includes(node.id)) {
+          existing.targetReactions.push(node.id);
+        }
+      } else {
+        feedstockMap.set(key, {
+          formula: reactant.formula,
+          name: reactant.name,
+          targetReactions: [node.id],
+        });
+      }
     }
   }
+
+  const feedstocks = Array.from(feedstockMap.entries());
+  const feedstockWidth = (feedstocks.length - 1) * 160;
+  feedstocks.forEach(([key, fs], i) => {
+    const nodeId = `feedstock-${key}`;
+    graphNodes.push({
+      id: nodeId,
+      type: "feedstock",
+      position: {
+        x: i * 160 - feedstockWidth / 2 + centerX,
+        y: 0,
+      },
+      data: { formula: fs.formula, name: fs.name },
+    });
+    for (const targetId of fs.targetReactions) {
+      graphEdges.push({
+        id: `edge-fs-${key}-${targetId}`,
+        source: nodeId,
+        target: targetId,
+        style: { stroke: "#3b82f6", strokeWidth: 1.5, strokeDasharray: "6 3" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
+      });
+    }
+  });
+
+  // --- Deduplicated product nodes (green ovals, bottom) ---
+  const productMap = new Map<string, { formula: string; name: string; sourceReactions: string[] }>();
+  for (const node of nodes) {
+    for (let pi = 0; pi < node.reaction.products.length; pi++) {
+      if (linkedProducts.has(`${node.id}:${pi}`)) continue;
+      const product = node.reaction.products[pi];
+      const key = normalizeFormula(product.formula);
+      const existing = productMap.get(key);
+      if (existing) {
+        if (!existing.sourceReactions.includes(node.id)) {
+          existing.sourceReactions.push(node.id);
+        }
+      } else {
+        productMap.set(key, {
+          formula: product.formula,
+          name: product.name,
+          sourceReactions: [node.id],
+        });
+      }
+    }
+  }
+
+  const products = Array.from(productMap.entries());
+  const productWidth = (products.length - 1) * 160;
+  const productY = (maxLevel + 1) * ySpacing + 150;
+  products.forEach(([key, pr], i) => {
+    const nodeId = `product-${key}`;
+    graphNodes.push({
+      id: nodeId,
+      type: "product",
+      position: {
+        x: i * 160 - productWidth / 2 + centerX,
+        y: productY,
+      },
+      data: { formula: pr.formula, name: pr.name },
+    });
+    for (const sourceId of pr.sourceReactions) {
+      graphEdges.push({
+        id: `edge-pr-${key}-${sourceId}`,
+        source: sourceId,
+        target: nodeId,
+        style: { stroke: "#22c55e", strokeWidth: 1.5, strokeDasharray: "6 3" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#22c55e" },
+      });
+    }
+  });
 
   return { graphNodes, graphEdges };
 }
 
 /** Inner component with useReactFlow access */
 function GraphInner({ system }: { system: ReactionSystem }) {
-  const { fitView, getNodes } = useReactFlow();
+  const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
   const { graphNodes, graphEdges } = useMemo(() => buildGraph(system), [system]);
 
@@ -251,7 +276,7 @@ function GraphInner({ system }: { system: ReactionSystem }) {
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setTimeout(() => fitView({ padding: 0.15, duration: 200 }), 150);
+          setTimeout(() => fitView({ padding: 0.12, duration: 200 }), 150);
         }
       }
     });
@@ -260,81 +285,106 @@ function GraphInner({ system }: { system: ReactionSystem }) {
   }, [fitView]);
 
   useEffect(() => {
-    setTimeout(() => fitView({ padding: 0.15, duration: 200 }), 250);
+    setTimeout(() => fitView({ padding: 0.12, duration: 200 }), 250);
   }, [graphNodes.length, graphEdges.length, fitView]);
 
   const handleDownloadPNG = () => {
     if (!containerRef.current) return;
-    const svgEl = containerRef.current.querySelector(".react-flow__viewport");
-    if (!svgEl) return;
 
-    // Use the container dimensions
+    // Fallback: Canvas 2D text rendering (reliable across all browsers)
     const rect = containerRef.current.getBoundingClientRect();
-    const canvas = document.createElement("canvas");
     const scale = 2;
+    const canvas = document.createElement("canvas");
     canvas.width = rect.width * scale;
     canvas.height = rect.height * scale;
     const ctx = canvas.getContext("2d")!;
+    ctx.scale(scale, scale);
 
-    // Serialize the SVG-based viewport
-    const svgData = new XMLSerializer().serializeToString(svgEl);
-    const svgBlob = new Blob(
-      [`<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}">${svgData}</svg>`],
-      { type: "image/svg+xml;charset=utf-8" }
-    );
-    const url = URL.createObjectURL(svgBlob);
-    const img = new Image();
-    img.onload = () => {
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      URL.revokeObjectURL(url);
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const dlUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = dlUrl;
-        a.download = "reaction-network.png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(dlUrl);
-      }, "image/png");
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      // Fallback: use Canvas 2D text rendering
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.font = "bold 20px sans-serif";
-      ctx.fillStyle = "#1f2937";
-      ctx.fillText("Reaction Network", 40, 40);
-      let y = 80;
-      ctx.font = "14px monospace";
-      for (const node of system.nodes) {
-        const title = node.displayName
-          ? `Rxn ${system.nodes.indexOf(node) + 1} — ${node.displayName}`
-          : `Rxn ${system.nodes.indexOf(node) + 1}`;
-        ctx.fillStyle = "#0d9488";
-        ctx.fillText(title, 40, y);
-        y += 20;
-        ctx.fillStyle = "#374151";
-        ctx.fillText(node.reaction.equation, 60, y);
-        y += 30;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    // Title
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillStyle = "#1f2937";
+    ctx.fillText("Reaction Network", 30, 30);
+
+    let y = 60;
+
+    // Feedstocks
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#3b82f6";
+    ctx.fillText("Feedstocks:", 30, y); y += 18;
+    ctx.font = "12px monospace";
+    const feedstocks = new Set<string>();
+    for (const node of system.nodes) {
+      for (let ri = 0; ri < node.reaction.reactants.length; ri++) {
+        const key = `${node.id}:${ri}`;
+        const isLinked = system.links.some(l => l.toReactionId === node.id && l.toReactantIndex === ri);
+        if (!isLinked) feedstocks.add(`${node.reaction.reactants[ri].formula} (${node.reaction.reactants[ri].name})`);
       }
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const dlUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = dlUrl;
-        a.download = "reaction-network.png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(dlUrl);
-      }, "image/png");
-    };
-    img.src = url;
+    }
+    for (const fs of feedstocks) { ctx.fillText(`  ${fs}`, 30, y); y += 16; }
+    y += 10;
+
+    // Reactions
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#0d9488";
+    ctx.fillText("Reactions:", 30, y); y += 18;
+    for (const node of system.nodes) {
+      const idx = system.nodes.indexOf(node) + 1;
+      const title = node.displayName ? `${idx}. ${node.displayName}` : `${idx}.`;
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillStyle = "#0d9488";
+      ctx.fillText(title, 30, y); y += 16;
+      ctx.font = "12px monospace";
+      ctx.fillStyle = "#374151";
+      ctx.fillText(`   ${node.reaction.equation}`, 30, y); y += 20;
+    }
+    y += 10;
+
+    // Links
+    if (system.links.length > 0) {
+      ctx.font = "bold 12px sans-serif";
+      ctx.fillStyle = "#7c3aed";
+      ctx.fillText("Links:", 30, y); y += 18;
+      ctx.font = "12px monospace";
+      for (const link of system.links) {
+        const from = system.nodes.find(n => n.id === link.fromReactionId);
+        const to = system.nodes.find(n => n.id === link.toReactionId);
+        const prod = from?.reaction.products[link.fromProductIndex];
+        const pct = Math.round(link.fraction * 100);
+        ctx.fillText(`  Rxn ${system.nodes.indexOf(from!) + 1} → Rxn ${system.nodes.indexOf(to!) + 1}: ${prod?.formula ?? '?'} (${pct}%)`, 30, y);
+        y += 16;
+      }
+      y += 10;
+    }
+
+    // Products
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillStyle = "#22c55e";
+    ctx.fillText("Products:", 30, y); y += 18;
+    ctx.font = "12px monospace";
+    const products = new Set<string>();
+    for (const node of system.nodes) {
+      for (let pi = 0; pi < node.reaction.products.length; pi++) {
+        const key = `${node.id}:${pi}`;
+        const isLinked = system.links.some(l => l.fromReactionId === node.id && l.fromProductIndex === pi);
+        if (!isLinked) products.add(`${node.reaction.products[pi].formula} (${node.reaction.products[pi].name})`);
+      }
+    }
+    for (const pr of products) { ctx.fillText(`  ${pr}`, 30, y); y += 16; }
+
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reaction-network.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, "image/png");
   };
 
   const totalLevels = Math.max(...graphNodes.map((n) => n.position.y), 200);
@@ -355,15 +405,15 @@ function GraphInner({ system }: { system: ReactionSystem }) {
       <div
         ref={containerRef}
         className="rounded-xl border border-gray-200 bg-white overflow-hidden"
-        style={{ height: Math.max(totalLevels + 250, 450) }}
+        style={{ height: Math.max(totalLevels + 150, 450) }}
       >
         <ReactFlow
           nodes={graphNodes}
           edges={graphEdges}
           nodeTypes={nodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.15 }}
-          minZoom={0.2}
+          fitViewOptions={{ padding: 0.12 }}
+          minZoom={0.15}
           maxZoom={1.5}
           proOptions={{ hideAttribution: true }}
         >

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { SessionMetadata } from "@/lib/session-storage";
-import { listSessions, deleteSession as deleteSessionStorage } from "@/lib/session-storage";
+import { listSessions, deleteSession as deleteSessionStorage, exportSessionToFile, importSessionFromFile } from "@/lib/session-storage";
 
 interface SessionManagerProps {
   hasContent: boolean;
@@ -25,12 +25,29 @@ export default function SessionManager({
   const [expanded, setExpanded] = useState(false);
   const [confirmLoadId, setConfirmLoadId] = useState<string | null>(null);
   const [confirmOverwriteName, setConfirmOverwriteName] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setSessions(listSessions());
   }, []);
 
   const refreshSessions = () => setSessions(listSessions());
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportError(null);
+    const result = await importSessionFromFile(file);
+    if (result) {
+      refreshSessions();
+      setExpanded(true);
+    } else {
+      setImportError("Invalid session file. Please select a .stoich.json file.");
+    }
+    // Reset file input so same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   // Save (overwrite current session)
   const handleSaveOverwrite = () => {
@@ -170,6 +187,23 @@ export default function SessionManager({
               </svg>
               Save As
             </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+              title="Import session from file"
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              Import
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.stoich.json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
           </div>
         )}
       </div>
@@ -201,6 +235,13 @@ export default function SessionManager({
               >
                 Cancel
               </button>
+            </div>
+          )}
+
+          {/* Import error */}
+          {importError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {importError}
             </div>
           )}
 
@@ -243,6 +284,13 @@ export default function SessionManager({
                         Load
                       </button>
                     )}
+                    <button
+                      onClick={() => exportSessionToFile(session.id)}
+                      className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                      title="Export to file"
+                    >
+                      Export
+                    </button>
                     <button
                       onClick={() => handleDelete(session.id)}
                       className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-500 transition hover:bg-red-50 hover:text-red-600 hover:border-red-200"
