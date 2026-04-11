@@ -11,7 +11,7 @@ export const SYSTEM_PROMPT = `You are a chemistry expert. Given a natural langua
 9. For combustible substances (including combustible solids like carbon, sugar, urea, etc.), provide the Higher Heating Value (HHV) and Lower Heating Value (LHV) in kJ/kg. A substance is combustible if it can react with oxygen to release heat.
 
 Important rules:
-- Always balance the equation with the smallest whole-number coefficients
+- Balance the equation with the smallest coefficients. Whole-number coefficients are preferred, but fractional coefficients (e.g., ½, ³⁄₂) are acceptable when they are the conventional form or produce a simpler representation
 - Use accurate molar masses based on standard atomic weights
 - Only mark a substance as "liquid" if it is genuinely liquid at 25°C and 1 atm
 - For the equation display string, use Unicode subscripts (₂, ₃, etc.) and the arrow →
@@ -49,7 +49,7 @@ export const TOOL_SCHEMA = {
             },
             coefficient: {
               type: "number",
-              description: "Stoichiometric coefficient in the balanced equation",
+              description: "Stoichiometric coefficient in the balanced equation. May be fractional (e.g., 0.5, 1.5) when conventional.",
             },
             molarMass: {
               type: "number",
@@ -115,7 +115,7 @@ export const TOOL_SCHEMA = {
             },
             coefficient: {
               type: "number",
-              description: "Stoichiometric coefficient in the balanced equation",
+              description: "Stoichiometric coefficient in the balanced equation. May be fractional (e.g., 0.5, 1.5) when conventional.",
             },
             molarMass: {
               type: "number",
