@@ -149,11 +149,14 @@ export default function HelpModal({ onClose }: HelpModalProps) {
               <li><strong>Save As</strong> — Save the current state with a new name.</li>
               <li><strong>Save</strong> — Overwrite the currently loaded session (appears when working on a loaded session).</li>
               <li><strong>Load</strong> — Restore a previously saved session including all reactions, links, results, input values, and economics prices.</li>
+              <li><strong>Export</strong> — Download a session as a <code>.stoich.json</code> file to share with others or transfer to another browser/device.</li>
+              <li><strong>Import</strong> — Load a <code>.stoich.json</code> file from disk into your saved sessions.</li>
               <li><strong>Delete</strong> — Remove a saved session.</li>
             </ul>
             <p className="mt-2 text-xs text-gray-500">
               Sessions are stored in your browser&rsquo;s local storage. They persist across page
-              refreshes but are specific to this browser and device.
+              refreshes but are specific to this browser and device. Use Export/Import to share
+              sessions or move them between devices.
             </p>
           </section>
 
@@ -206,6 +209,51 @@ export default function HelpModal({ onClose }: HelpModalProps) {
             </p>
           </section>
 
+          {/* Reaction Network Graph */}
+          <section>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Reaction Network Graph</h3>
+            <p>
+              When you have two or more reactions, a collapsible <strong>Reaction Network</strong>
+              section appears showing an interactive flow diagram:
+            </p>
+            <ul className="list-disc list-inside space-y-1 mt-2">
+              <li><strong>Blue ovals</strong> (top) — feedstocks entering the system.</li>
+              <li><strong>Teal rectangles</strong> (middle) — reactions, with equations and optional custom names.</li>
+              <li><strong>Green ovals</strong> (bottom) — products and coproducts leaving the system.</li>
+              <li><strong>Purple arrows</strong> — linked substance flows between reactions (with formula and fraction).</li>
+              <li>Nodes can be <strong>dragged</strong> to rearrange the layout. Use zoom and pan controls.</li>
+              <li><strong>Download PNG</strong> button exports the network as an image.</li>
+            </ul>
+          </section>
+
+          {/* Topology Validation */}
+          <section>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Topology Validation</h3>
+            <p>
+              The app automatically checks your reaction system for common issues and displays
+              warnings above the network graph:
+            </p>
+            <ul className="list-disc list-inside space-y-1 mt-2">
+              <li>Unlinked products that match reactants in other reactions (missing links).</li>
+              <li>Mismatched formulas in links (product formula &#8800; reactant formula).</li>
+              <li>Split fractions exceeding 100% for the same product.</li>
+              <li>Circular dependencies (cycles) in the reaction chain.</li>
+              <li>Disconnected reactions with no links.</li>
+            </ul>
+          </section>
+
+          {/* Naming Reactions */}
+          <section>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Naming Reactions</h3>
+            <p>
+              Click the pencil icon (&#9998;) on any reaction card to give it a custom name
+              (e.g., &ldquo;Boudouard Reaction&rdquo;, &ldquo;Haber Process&rdquo;). The name
+              appears as &ldquo;Reaction 2 &#8212; Haber Process&rdquo; throughout the app,
+              including in the network graph. This is optional &#8212; leave blank to keep the
+              default numbering.
+            </p>
+          </section>
+
           {/* Tips */}
           <section>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Tips</h3>
@@ -213,6 +261,7 @@ export default function HelpModal({ onClose }: HelpModalProps) {
               <li>Use the <strong>+ insert</strong> buttons between reaction cards to add a reaction at a specific position in the sequence.</li>
               <li>Be specific in reaction descriptions — include reactant and product names.</li>
               <li>Use the fraction field in series links to model partial conversions or splits.</li>
+              <li>The link editor auto-matches product and reactant formulas and shows a green/amber indicator.</li>
               <li>Check the System Totals tab for excess/deficit warnings that indicate stoichiometric imbalances.</li>
               <li>Save your work frequently — the AI parsing costs API credits each time.</li>
             </ul>
