@@ -116,6 +116,7 @@ export interface SubstanceTotals {
 export interface SystemCalculationResult {
   perReaction: Map<string, CalculationResult[]>;
   totals: SubstanceTotals[];
+  debugInfo?: string;
 }
 
 export interface SystemThermodynamics {

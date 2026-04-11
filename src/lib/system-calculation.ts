@@ -156,27 +156,33 @@ export function calculateSystem(
     perReaction.set(nodeId, results);
   }
 
-  // Debug: log per-reaction results
-  console.group("System Calculation Debug");
+  const totals = aggregateSubstances(system, perReaction);
+
+  // Build debug info for UI display
+  const debugLines: string[] = [];
   for (const [nodeId, results] of perReaction) {
     const node = nodeMap.get(nodeId);
-    console.group(`Reaction: ${node?.label?.slice(0, 50)}`);
+    debugLines.push(`--- ${node?.label?.slice(0, 60) ?? nodeId} ---`);
     for (const r of results) {
-      console.log(`  ${r.substance.role} ${normalizeFormula(r.substance.formula)} (${r.substance.name}): ${r.moles.toPrecision(4)} mol`);
+      debugLines.push(`  ${r.substance.role}: ${normalizeFormula(r.substance.formula)} = ${r.moles.toPrecision(4)} mol`);
     }
-    console.groupEnd();
   }
-  console.log("Links:", system.links.map(l => {
+  debugLines.push("");
+  debugLines.push("--- Links ---");
+  for (const l of system.links) {
     const from = nodeMap.get(l.fromReactionId);
     const to = nodeMap.get(l.toReactionId);
     const prod = from?.reaction.products[l.fromProductIndex];
     const react = to?.reaction.reactants[l.toReactantIndex];
-    return `${normalizeFormula(prod?.formula ?? '?')} (idx ${l.fromProductIndex}, ${l.fraction*100}%) → ${normalizeFormula(react?.formula ?? '?')} (idx ${l.toReactantIndex})`;
-  }));
-  console.groupEnd();
+    debugLines.push(`  ${normalizeFormula(prod?.formula ?? '?')} [product idx ${l.fromProductIndex}] —(${(l.fraction*100).toFixed(0)}%)→ ${normalizeFormula(react?.formula ?? '?')} [reactant idx ${l.toReactantIndex}]`);
+  }
+  debugLines.push("");
+  debugLines.push("--- Aggregation ---");
+  for (const t of totals) {
+    debugLines.push(`  ${normalizeFormula(t.formula)}: produced=${t.produced.toPrecision(4)}, consumed=${t.consumed.toPrecision(4)}, net=${t.totalMoles.toPrecision(4)}, role=${t.role}`);
+  }
 
-  const totals = aggregateSubstances(system, perReaction);
-  return { perReaction, totals };
+  return { perReaction, totals, debugInfo: debugLines.join("\n") };
 }
 
 /**

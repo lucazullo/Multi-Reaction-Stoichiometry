@@ -448,6 +448,18 @@ export default function Home() {
                   </div>
                   <SystemTotalsTable totals={systemResult.totals} />
                 </section>
+
+                {/* Debug Info (collapsible) */}
+                {systemResult.debugInfo && (
+                  <details className="rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <summary className="px-6 py-3 text-xs font-medium text-gray-400 cursor-pointer hover:text-gray-600">
+                      Debug Info (click to expand)
+                    </summary>
+                    <pre className="px-6 pb-4 text-xs text-gray-500 font-mono whitespace-pre-wrap overflow-x-auto">
+                      {systemResult.debugInfo}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
 
@@ -606,7 +618,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.06f — April 2026</p>
+        <p>Version 1.06g — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
