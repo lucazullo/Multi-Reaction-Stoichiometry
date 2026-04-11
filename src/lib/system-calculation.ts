@@ -156,6 +156,25 @@ export function calculateSystem(
     perReaction.set(nodeId, results);
   }
 
+  // Debug: log per-reaction results
+  console.group("System Calculation Debug");
+  for (const [nodeId, results] of perReaction) {
+    const node = nodeMap.get(nodeId);
+    console.group(`Reaction: ${node?.label?.slice(0, 50)}`);
+    for (const r of results) {
+      console.log(`  ${r.substance.role} ${normalizeFormula(r.substance.formula)} (${r.substance.name}): ${r.moles.toPrecision(4)} mol`);
+    }
+    console.groupEnd();
+  }
+  console.log("Links:", system.links.map(l => {
+    const from = nodeMap.get(l.fromReactionId);
+    const to = nodeMap.get(l.toReactionId);
+    const prod = from?.reaction.products[l.fromProductIndex];
+    const react = to?.reaction.reactants[l.toReactantIndex];
+    return `${normalizeFormula(prod?.formula ?? '?')} (idx ${l.fromProductIndex}, ${l.fraction*100}%) → ${normalizeFormula(react?.formula ?? '?')} (idx ${l.toReactantIndex})`;
+  }));
+  console.groupEnd();
+
   const totals = aggregateSubstances(system, perReaction);
   return { perReaction, totals };
 }
