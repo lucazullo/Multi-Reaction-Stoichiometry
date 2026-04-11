@@ -6,10 +6,10 @@ export interface Substance {
   coefficient: number;
   molarMass: number; // g/mol
   state: PhysicalState;
-  density: number | null; // g/mL, for liquids at 25°C
-  densityGas: number | null; // kg/m³ at STP (0°C, 1 atm) for gases, null for non-gases
-  hhv: number | null; // Higher Heating Value in kJ/kg, null if not combustible
-  lhv: number | null; // Lower Heating Value in kJ/kg, null if not combustible
+  density: number | null; // g/mL (= kg/L) at 25°C for solids/liquids; null if unknown
+  densityGas: number | null; // kg/m³ at STP (0°C, 1 atm) for gases; null for non-gases
+  hhv: number | null; // Higher Heating Value in kJ/kg; null if not combustible
+  lhv: number | null; // Lower Heating Value in kJ/kg; null if not combustible
   enthalpyOfFormation: number; // kJ/mol, standard ΔHf°
   role: "reactant" | "product";
 }

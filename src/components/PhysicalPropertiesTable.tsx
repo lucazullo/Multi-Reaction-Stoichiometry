@@ -42,7 +42,8 @@ function fmt(n: number | null | undefined): string {
 }
 
 function convertDensity(p: SubstanceProps, unit: DensityUnit): string {
-  if (p.isLiquid && p.densityLiquid !== null) {
+  // Solids and liquids both use density in g/mL (= kg/L)
+  if (p.densityLiquid !== null) {
     const kgPerL = p.densityLiquid;
     switch (unit) {
       case "kg/L": return fmt(kgPerL);

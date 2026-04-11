@@ -53,10 +53,20 @@ export async function POST(request: Request) {
       products: Array<Omit<Substance, "role">>;
     };
 
+    // Ensure all optional fields have defaults
+    const withDefaults = (s: Record<string, unknown>) => ({
+      ...s,
+      density: s.density ?? null,
+      densityGas: s.densityGas ?? null,
+      hhv: s.hhv ?? null,
+      lhv: s.lhv ?? null,
+      enthalpyOfFormation: s.enthalpyOfFormation ?? 0,
+    });
+
     const data: BalancedReaction = {
       equation: raw.equation,
-      reactants: raw.reactants.map((r) => ({ ...r, role: "reactant" as const })),
-      products: raw.products.map((p) => ({ ...p, role: "product" as const })),
+      reactants: raw.reactants.map((r) => ({ ...withDefaults(r), role: "reactant" as const })) as BalancedReaction["reactants"],
+      products: raw.products.map((p) => ({ ...withDefaults(p), role: "product" as const })) as BalancedReaction["products"],
     };
 
     return Response.json({ success: true, data });

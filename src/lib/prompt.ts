@@ -5,10 +5,10 @@ export const SYSTEM_PROMPT = `You are a chemistry expert. Given a natural langua
 3. Balance the equation
 4. Provide accurate molar masses (g/mol) for each substance
 5. Identify the physical state of each substance at standard conditions (25°C, 1 atm)
-6. For liquid substances, provide the density in g/mL at 25°C
+6. Provide the density in g/mL (= g/cm³ = kg/L) at 25°C for ALL solids and liquids
 7. For gaseous substances, provide the gas density in kg/m³ at STP (0°C, 1 atm)
 8. Provide the standard enthalpy of formation (ΔHf°) in kJ/mol for each substance
-9. For combustible substances, provide the Higher Heating Value (HHV) and Lower Heating Value (LHV) in kJ/kg
+9. For combustible substances (including combustible solids like carbon, sugar, urea, etc.), provide the Higher Heating Value (HHV) and Lower Heating Value (LHV) in kJ/kg. A substance is combustible if it can react with oxygen to release heat.
 
 Important rules:
 - Always balance the equation with the smallest whole-number coefficients
@@ -17,6 +17,7 @@ Important rules:
 - For the equation display string, use Unicode subscripts (₂, ₃, etc.) and the arrow →
 - Be precise with molar masses to at least 2 decimal places
 - For enthalpyOfFormation: use standard values at 25°C, 1 atm. Elements in their standard state have ΔHf° = 0 (e.g., O₂(g), Fe(s), H₂(g)). Use kJ/mol.
+- For density: provide for ALL substances — solids and liquids in g/mL at 25°C. Only null if truly unknown.
 - For densityGas: use kg/m³ at STP (0°C, 1 atm). For ideal gases, this is approximately molarMass/22.414. Null for non-gases.
 - For hhv: provide the Higher Heating Value in kJ/kg. This is the total heat released when a substance undergoes complete combustion including condensation of water vapor. Null for non-combustible substances (e.g., N₂, H₂O, CO₂).
 - For lhv: provide the Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Null for non-combustible substances.`;
@@ -62,7 +63,7 @@ export const TOOL_SCHEMA = {
             density: {
               type: ["number", "null"],
               description:
-                "Density in g/mL at 25°C. Required for liquids, null for others.",
+                "Density in g/mL (= kg/L) at 25°C. Required for solids and liquids. Null only for gases.",
             },
             enthalpyOfFormation: {
               type: "number",
@@ -77,12 +78,12 @@ export const TOOL_SCHEMA = {
             hhv: {
               type: ["number", "null"],
               description:
-                "Higher Heating Value in kJ/kg. Heat released on complete combustion including water condensation. Null for non-combustible substances.",
+                "Higher Heating Value in kJ/kg. Heat released on complete combustion with O₂, water condensed. Provide for ALL combustible substances (gases, liquids, AND solids like C, urea, sugar). Null only for non-combustible substances (O₂, N₂, H₂O, CO₂, CaO, CaCO₃, etc.).",
             },
             lhv: {
               type: ["number", "null"],
               description:
-                "Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Null for non-combustible substances.",
+                "Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Provide for ALL combustible substances. Null only for non-combustible.",
             },
           },
           required: [
@@ -128,7 +129,7 @@ export const TOOL_SCHEMA = {
             density: {
               type: ["number", "null"],
               description:
-                "Density in g/mL at 25°C. Required for liquids, null for others.",
+                "Density in g/mL (= kg/L) at 25°C. Required for solids and liquids. Null only for gases.",
             },
             enthalpyOfFormation: {
               type: "number",
@@ -143,12 +144,12 @@ export const TOOL_SCHEMA = {
             hhv: {
               type: ["number", "null"],
               description:
-                "Higher Heating Value in kJ/kg. Heat released on complete combustion including water condensation. Null for non-combustible substances.",
+                "Higher Heating Value in kJ/kg. Heat released on complete combustion with O₂, water condensed. Provide for ALL combustible substances (gases, liquids, AND solids like C, urea, sugar). Null only for non-combustible substances (O₂, N₂, H₂O, CO₂, CaO, CaCO₃, etc.).",
             },
             lhv: {
               type: ["number", "null"],
               description:
-                "Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Null for non-combustible substances.",
+                "Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Provide for ALL combustible substances. Null only for non-combustible.",
             },
           },
           required: [

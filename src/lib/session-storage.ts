@@ -139,6 +139,22 @@ export function saveSession(snapshot: SessionSnapshot): void {
   localStorage.setItem(SESSIONS_INDEX_KEY, JSON.stringify(sessions));
 }
 
+// Ensure substances from older sessions have new fields
+function migrateSubstance(s: Record<string, unknown>): void {
+  if (s.densityGas === undefined) s.densityGas = null;
+  if (s.hhv === undefined) s.hhv = null;
+  if (s.lhv === undefined) s.lhv = null;
+  if (s.enthalpyOfFormation === undefined) s.enthalpyOfFormation = 0;
+}
+
+function migrateSystem(system: ReactionSystem): void {
+  for (const node of system.nodes) {
+    for (const s of [...node.reaction.reactants, ...node.reaction.products]) {
+      migrateSubstance(s as unknown as Record<string, unknown>);
+    }
+  }
+}
+
 export function loadSession(id: string): LoadedSession | null {
   try {
     const key = SESSION_PREFIX + id;
@@ -146,6 +162,9 @@ export function loadSession(id: string): LoadedSession | null {
     if (!raw) return null;
 
     const data = JSON.parse(raw);
+
+    // Migrate older sessions to include new fields
+    if (data.system) migrateSystem(data.system);
 
     // Reconstruct Maps from serialized entries
     return {
