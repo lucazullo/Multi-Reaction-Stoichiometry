@@ -17,6 +17,7 @@ import { normalizeFormula } from "./utils";
 /**
  * Calculate the full reaction system starting from any reaction + substance.
  * Propagates FORWARD through outgoing links and BACKWARD through incoming links.
+ * Handles multiple outgoing links (splits) and multiple incoming links (merges).
  */
 export function calculateSystem(
   system: ReactionSystem,
@@ -44,84 +45,167 @@ export function calculateSystem(
   const startResults = calculateStoichiometry(startNode.reaction, input);
   perReaction.set(startReactionId, startResults);
 
-  // 2. Forward propagation (BFS from start, following outgoing links)
-  const forwardQueue = [startReactionId];
-  const forwardVisited = new Set([startReactionId]);
+  // 2. Forward propagation
+  // Use topological order to ensure all incoming links are resolved before calculating
+  const forwardOrder = topologicalForward(system, startReactionId, outgoingLinks);
 
-  while (forwardQueue.length > 0) {
-    const currentId = forwardQueue.shift()!;
-    const currentResults = perReaction.get(currentId)!;
-    const currentNode = nodeMap.get(currentId)!;
+  for (const nodeId of forwardOrder) {
+    if (nodeId === startReactionId) continue; // already calculated
+    if (perReaction.has(nodeId)) continue;
 
-    for (const link of outgoingLinks.get(currentId) ?? []) {
-      if (forwardVisited.has(link.toReactionId)) continue;
+    const node = nodeMap.get(nodeId);
+    if (!node) continue;
 
-      const targetNode = nodeMap.get(link.toReactionId);
-      if (!targetNode) continue;
+    // Gather all incoming links from already-calculated reactions
+    const incoming = (incomingLinks.get(nodeId) ?? []).filter(
+      (l) => perReaction.has(l.fromReactionId)
+    );
+    if (incoming.length === 0) continue;
 
-      // Get product moles from source
+    // For each incoming link, compute moles available for the target reactant
+    const reactantMoles = new Map<number, number>();
+
+    for (const link of incoming) {
+      const sourceResults = perReaction.get(link.fromReactionId)!;
+      const sourceNode = nodeMap.get(link.fromReactionId)!;
       const productResultIndex =
-        currentNode.reaction.reactants.length + link.fromProductIndex;
-      const productResult = currentResults[productResultIndex];
+        sourceNode.reaction.reactants.length + link.fromProductIndex;
+      const productResult = sourceResults[productResultIndex];
       if (!productResult) continue;
 
       const molesAvailable = productResult.moles * link.fraction;
-
-      // Check if target already has partial results from other links
-      // For now, use the linked substance as the determining input
-      const targetInput: CalculationInput = {
-        substanceIndex: link.toReactantIndex,
-        amount: molesAvailable,
-        unit: "mol",
-      };
-
-      const results = calculateStoichiometry(targetNode.reaction, targetInput);
-      perReaction.set(link.toReactionId, results);
-      forwardVisited.add(link.toReactionId);
-      forwardQueue.push(link.toReactionId);
+      const existing = reactantMoles.get(link.toReactantIndex) ?? 0;
+      reactantMoles.set(link.toReactantIndex, existing + molesAvailable);
     }
+
+    if (reactantMoles.size === 0) continue;
+
+    // Find limiting reactant (smallest scale factor)
+    let minScale = Infinity;
+    let limitingIdx = 0;
+    let limitingMoles = 0;
+
+    for (const [reactantIndex, moles] of reactantMoles) {
+      const substance = node.reaction.reactants[reactantIndex];
+      if (!substance) continue;
+      const scale = moles / substance.coefficient;
+      if (scale < minScale) {
+        minScale = scale;
+        limitingIdx = reactantIndex;
+        limitingMoles = moles;
+      }
+    }
+
+    const results = calculateStoichiometry(node.reaction, {
+      substanceIndex: limitingIdx,
+      amount: limitingMoles,
+      unit: "mol",
+    });
+    perReaction.set(nodeId, results);
   }
 
-  // 3. Backward propagation (BFS from start, following incoming links in reverse)
-  const backwardQueue = [startReactionId];
-  const backwardVisited = new Set([startReactionId]);
+  // 3. Backward propagation
+  const backwardOrder = topologicalBackward(system, startReactionId, incomingLinks);
 
-  while (backwardQueue.length > 0) {
-    const currentId = backwardQueue.shift()!;
-    const currentResults = perReaction.get(currentId)!;
-    const currentNode = nodeMap.get(currentId)!;
+  for (const nodeId of backwardOrder) {
+    if (nodeId === startReactionId) continue;
+    if (perReaction.has(nodeId)) continue;
 
-    for (const link of incomingLinks.get(currentId) ?? []) {
-      if (backwardVisited.has(link.fromReactionId)) continue;
+    const node = nodeMap.get(nodeId);
+    if (!node) continue;
 
-      const sourceNode = nodeMap.get(link.fromReactionId);
-      if (!sourceNode) continue;
+    // Find outgoing links to already-calculated reactions
+    const outgoing = (outgoingLinks.get(nodeId) ?? []).filter(
+      (l) => perReaction.has(l.toReactionId)
+    );
+    if (outgoing.length === 0) continue;
 
-      // How much of the linked reactant does the current reaction need?
-      const reactantResult = currentResults[link.toReactantIndex];
+    // For each outgoing link, compute how much product this reaction must produce
+    // to satisfy the downstream reactant needs
+    let maxScale = 0;
+
+    for (const link of outgoing) {
+      const targetResults = perReaction.get(link.toReactionId)!;
+      const reactantResult = targetResults[link.toReactantIndex];
       if (!reactantResult) continue;
 
-      // The source must produce enough: molesNeeded = reactantMoles / fraction
+      // How much does the downstream need from us?
       const molesNeeded = reactantResult.moles / (link.fraction || 1);
+      const productSubstance = node.reaction.products[link.fromProductIndex];
+      if (!productSubstance) continue;
+      const scale = molesNeeded / productSubstance.coefficient;
 
-      // Calculate source reaction based on required product output
-      const productIndex =
-        sourceNode.reaction.reactants.length + link.fromProductIndex;
-      const sourceInput: CalculationInput = {
-        substanceIndex: productIndex,
-        amount: molesNeeded,
-        unit: "mol",
-      };
-
-      const results = calculateStoichiometry(sourceNode.reaction, sourceInput);
-      perReaction.set(link.fromReactionId, results);
-      backwardVisited.add(link.fromReactionId);
-      backwardQueue.push(link.fromReactionId);
+      // Use the largest scale (must produce enough for ALL downstream consumers)
+      if (scale > maxScale) maxScale = scale;
     }
+
+    if (maxScale === 0) continue;
+
+    // Calculate using the first outgoing link's product as reference,
+    // scaled to the max needed
+    const refLink = outgoing[0];
+    const productIndex =
+      node.reaction.reactants.length + refLink.fromProductIndex;
+    const molesNeeded = maxScale * node.reaction.products[refLink.fromProductIndex].coefficient;
+
+    const results = calculateStoichiometry(node.reaction, {
+      substanceIndex: productIndex,
+      amount: molesNeeded,
+      unit: "mol",
+    });
+    perReaction.set(nodeId, results);
   }
 
   const totals = aggregateSubstances(system, perReaction);
   return { perReaction, totals };
+}
+
+/**
+ * Get forward topological order starting from startId.
+ */
+function topologicalForward(
+  system: ReactionSystem,
+  startId: string,
+  outgoingLinks: Map<string, SeriesLink[]>
+): string[] {
+  const visited = new Set<string>();
+  const order: string[] = [];
+
+  function dfs(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    for (const link of outgoingLinks.get(id) ?? []) {
+      dfs(link.toReactionId);
+    }
+    order.push(id);
+  }
+
+  dfs(startId);
+  return order.reverse(); // topological order
+}
+
+/**
+ * Get backward topological order starting from startId.
+ */
+function topologicalBackward(
+  system: ReactionSystem,
+  startId: string,
+  incomingLinks: Map<string, SeriesLink[]>
+): string[] {
+  const visited = new Set<string>();
+  const order: string[] = [];
+
+  function dfs(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    for (const link of incomingLinks.get(id) ?? []) {
+      dfs(link.fromReactionId);
+    }
+    order.push(id);
+  }
+
+  dfs(startId);
+  return order.reverse();
 }
 
 /**
@@ -134,38 +218,18 @@ function aggregateSubstances(
 ): SubstanceTotals[] {
   const nodeMap = new Map(system.nodes.map((n) => [n.id, n]));
 
-  // Track link flows: how much was available vs consumed for each linked substance
-  const linkFlows: Array<{
-    formula: string;
-    available: number;
-    consumed: number;
-    fraction: number;
-    fromLabel: string;
-    toLabel: string;
-  }> = [];
-
+  // Track linked formulas
+  const linkedFormulas = new Set<string>();
   for (const link of system.links) {
     const sourceNode = nodeMap.get(link.fromReactionId);
+    if (sourceNode) {
+      const product = sourceNode.reaction.products[link.fromProductIndex];
+      if (product) linkedFormulas.add(normalizeFormula(product.formula));
+    }
     const targetNode = nodeMap.get(link.toReactionId);
-    const sourceResults = perReaction.get(link.fromReactionId);
-    const targetResults = perReaction.get(link.toReactionId);
-    if (!sourceNode || !targetNode || !sourceResults || !targetResults) continue;
-
-    const productIdx = sourceNode.reaction.reactants.length + link.fromProductIndex;
-    const productResult = sourceResults[productIdx];
-    const reactantResult = targetResults[link.toReactantIndex];
-    if (!productResult || !reactantResult) continue;
-
-    const product = sourceNode.reaction.products[link.fromProductIndex];
-    if (product) {
-      linkFlows.push({
-        formula: normalizeFormula(product.formula),
-        available: productResult.moles * link.fraction,
-        consumed: reactantResult.moles,
-        fraction: link.fraction,
-        fromLabel: sourceNode.label,
-        toLabel: targetNode.label,
-      });
+    if (targetNode) {
+      const reactant = targetNode.reaction.reactants[link.toReactantIndex];
+      if (reactant) linkedFormulas.add(normalizeFormula(reactant.formula));
     }
   }
 
@@ -196,9 +260,6 @@ function aggregateSubstances(
     }
   }
 
-  // Build linked formulas set
-  const linkedFormulas = new Set(linkFlows.map((f) => f.formula));
-
   const allFormulas = new Set([...consumed.keys(), ...produced.keys()]);
   const totals: SubstanceTotals[] = [];
 
@@ -212,22 +273,15 @@ function aggregateSubstances(
     let note: string | undefined;
 
     if (linkedFormulas.has(formula)) {
-      // This substance flows through a link
-      const flow = linkFlows.find((f) => f.formula === formula);
-
       if (Math.abs(net) < 1e-10) {
         role = "intermediate";
         note = "Fully consumed in downstream reaction";
       } else if (net > 0) {
         role = "excess";
-        note = flow
-          ? `Excess: ${net.toPrecision(4)} mol produced beyond what downstream reaction consumes`
-          : undefined;
+        note = `Excess: ${net.toPrecision(4)} mol produced beyond what downstream consumes`;
       } else {
         role = "deficit";
-        note = flow
-          ? `Deficit: ${Math.abs(net).toPrecision(4)} mol more needed than upstream reaction produces`
-          : undefined;
+        note = `Deficit: ${Math.abs(net).toPrecision(4)} mol more needed than upstream produces`;
       }
     } else if (net > 0) {
       role = "net-product";
@@ -251,8 +305,8 @@ function aggregateSubstances(
       totalGrams: netGrams,
       totalKilograms: netGrams / 1000,
       totalPounds: netGrams / 453.592,
-      totalTons: netGrams / 907185,      // short ton = 907,185 g
-      totalTonnes: netGrams / 1000000,   // metric tonne = 1,000,000 g
+      totalTons: netGrams / 907185,
+      totalTonnes: netGrams / 1000000,
       totalLiters: isLiquid && density ? netGrams / density / 1000 : null,
       totalGallons: isLiquid && density ? netGrams / density / 3785.41 : null,
       isLiquid,
@@ -262,7 +316,6 @@ function aggregateSubstances(
     });
   }
 
-  // Sort: net-reactants, deficit, intermediate, excess, net-products
   const roleOrder: Record<string, number> = {
     "net-reactant": 0,
     deficit: 1,
@@ -300,4 +353,3 @@ export function calculateSystemThermodynamics(
     isExothermic: totalDeltaH < 0,
   };
 }
-
