@@ -52,6 +52,7 @@ import {
   createSnapshot,
   saveSession,
   loadSession,
+  exportSessionToFile,
 } from "@/lib/session-storage";
 
 let nextNodeId = 0;
@@ -217,6 +218,25 @@ export default function Home() {
     saveSession(snapshot);
   };
 
+  const handleSaveToFile = (name: string) => {
+    const snapshot = createSnapshot(
+      name,
+      system,
+      systemResult,
+      systemThermo,
+      systemEcon,
+      energyUnit,
+      startReactionId,
+      startInput,
+      nextNodeId,
+      nextLinkId,
+      savedPrices
+    );
+    saveSession(snapshot);
+    // Export immediately after saving
+    exportSessionToFile(snapshot.metadata.id);
+  };
+
   const handleLoadSession = (id: string) => {
     const snapshot = loadSession(id);
     if (!snapshot) return;
@@ -287,6 +307,7 @@ export default function Home() {
           hasContent={system.nodes.length > 0}
           currentSessionName={currentSessionName}
           onSave={handleSaveSession}
+          onSaveToFile={handleSaveToFile}
           onLoad={handleLoadSession}
           onSessionLoaded={setCurrentSessionName}
         />
@@ -637,7 +658,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.14a — April 2026</p>
+        <p>Version 1.14b — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}

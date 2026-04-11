@@ -189,16 +189,39 @@ export function deleteSession(id: string): void {
 
 // --- File Export/Import ---
 
-/** Export a session as a JSON file download */
-export function exportSessionToFile(id: string): void {
+/** Export a session as a JSON file download.
+ *  Uses File System Access API (Save As dialog) in Chrome/Edge,
+ *  falls back to regular download in Safari/Firefox. */
+export async function exportSessionToFile(id: string): Promise<void> {
   const key = SESSION_PREFIX + id;
   const raw = localStorage.getItem(key);
   if (!raw) return;
 
   const data = JSON.parse(raw);
   const filename = `${(data.metadata?.name ?? "session").replace(/[^a-zA-Z0-9_-]/g, "_")}.stoich.json`;
+  const content = JSON.stringify(data, null, 2);
+  const blob = new Blob([content], { type: "application/json" });
 
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  // Try File System Access API (shows Save As dialog — Chrome/Edge only)
+  if ("showSaveFilePicker" in window) {
+    try {
+      const handle = await (window as unknown as { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
+        suggestedName: filename,
+        types: [{
+          description: "Stoichiometry Session",
+          accept: { "application/json": [".stoich.json", ".json"] },
+        }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch {
+      // User cancelled or API failed — fall through to regular download
+    }
+  }
+
+  // Fallback: regular download (goes to browser's download folder)
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

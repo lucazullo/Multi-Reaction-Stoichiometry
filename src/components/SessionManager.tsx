@@ -6,16 +6,18 @@ import { listSessions, deleteSession as deleteSessionStorage, exportSessionToFil
 
 interface SessionManagerProps {
   hasContent: boolean;
-  currentSessionName: string | null; // name of the loaded session, null if new work
-  onSave: (name: string) => void;    // save (new or overwrite)
+  currentSessionName: string | null;
+  onSave: (name: string) => void;
+  onSaveToFile: (name: string) => void; // save to browser AND download as file
   onLoad: (id: string) => void;
-  onSessionLoaded: (name: string) => void; // notify parent of loaded session name
+  onSessionLoaded: (name: string) => void;
 }
 
 export default function SessionManager({
   hasContent,
   currentSessionName,
   onSave,
+  onSaveToFile,
   onLoad,
   onSessionLoaded,
 }: SessionManagerProps) {
@@ -226,8 +228,24 @@ export default function SessionManager({
                 onClick={handleSaveAs}
                 disabled={!saveAsName.trim()}
                 className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-teal-700 disabled:opacity-50"
+                title="Save to browser"
               >
                 Save
+              </button>
+              <button
+                onClick={() => {
+                  if (!saveAsName.trim()) return;
+                  onSaveToFile(saveAsName.trim());
+                  onSessionLoaded(saveAsName.trim());
+                  setSaveAsName("");
+                  setShowSaveAs(false);
+                  refreshSessions();
+                }}
+                disabled={!saveAsName.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+                title="Save to browser and download as file"
+              >
+                Save to File
               </button>
               <button
                 onClick={() => setShowSaveAs(false)}
