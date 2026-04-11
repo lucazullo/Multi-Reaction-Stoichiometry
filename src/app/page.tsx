@@ -39,6 +39,9 @@ import SystemEquationSummary from "@/components/SystemEquationSummary";
 import ResultsTable from "@/components/ResultsTable";
 import ThermodynamicsDisplay from "@/components/ThermodynamicsDisplay";
 import SystemEconomicsPanel from "@/components/SystemEconomicsPanel";
+import ReactionNetworkGraph from "@/components/ReactionNetworkGraph";
+import ValidationWarnings from "@/components/ValidationWarnings";
+import { validateSystem } from "@/lib/topology-validator";
 import SystemEconomicsDisplay from "@/components/SystemEconomicsDisplay";
 import PhysicalPropertiesTable from "@/components/PhysicalPropertiesTable";
 import DownloadButton from "@/components/DownloadButton";
@@ -361,6 +364,19 @@ export default function Home() {
           />
         )}
 
+        {/* Validation Warnings */}
+        {system.nodes.length >= 2 && (
+          <ValidationWarnings warnings={validateSystem(system)} />
+        )}
+
+        {/* Reaction Network Graph */}
+        {system.nodes.length >= 2 && (
+          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <h2 className="mb-3 text-lg font-semibold text-gray-800">Reaction Network</h2>
+            <ReactionNetworkGraph system={system} />
+          </section>
+        )}
+
         {/* System Input */}
         {system.nodes.length > 0 && (
           <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -608,7 +624,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.10 — April 2026</p>
+        <p>Version 1.11 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
