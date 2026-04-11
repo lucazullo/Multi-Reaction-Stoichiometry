@@ -166,20 +166,20 @@ export default function SessionManager({
           )}
         </button>
 
-        {hasContent && (
-          <div className="flex items-center gap-2">
-            {currentSessionName && (
-              <button
-                onClick={handleSaveOverwrite}
-                className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-teal-700"
-                title={`Save over "${currentSessionName}"`}
-              >
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
-                </svg>
-                Save
-              </button>
-            )}
+        <div className="flex items-center gap-2">
+          {hasContent && currentSessionName && (
+            <button
+              onClick={handleSaveOverwrite}
+              className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-teal-700"
+              title={`Save over "${currentSessionName}"`}
+            >
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+              </svg>
+              Save
+            </button>
+          )}
+          {hasContent && (
             <button
               onClick={() => { setShowSaveAs(!showSaveAs); setExpanded(true); setSaveAsName(""); }}
               className="flex items-center gap-1.5 rounded-lg border border-teal-300 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-700 transition hover:bg-teal-100"
@@ -189,25 +189,25 @@ export default function SessionManager({
               </svg>
               Save As
             </button>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-              title="Import session from file"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-              Import
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,.stoich.json"
-              onChange={handleImportFile}
-              className="hidden"
-            />
-          </div>
-        )}
+          )}
+          <button
+            onClick={() => { fileInputRef.current?.click(); setExpanded(true); }}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+            title="Import session from file"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+            Import
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.stoich.json"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+        </div>
       </div>
 
       {expanded && (
