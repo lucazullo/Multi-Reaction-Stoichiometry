@@ -20,12 +20,15 @@ interface ReactionNetworkGraphProps {
 }
 
 // Custom node component for reactions
-function ReactionNodeComponent({ data }: { data: { label: string; equation: string; index: number } }) {
+function ReactionNodeComponent({ data }: { data: { label: string; equation: string; index: number; displayName?: string } }) {
+  const title = data.displayName
+    ? `Reaction ${data.index + 1} — ${data.displayName}`
+    : `Reaction ${data.index + 1}`;
   return (
     <div className="rounded-lg border-2 border-teal-500 bg-white px-4 py-3 shadow-md min-w-[180px] max-w-[280px]">
       <Handle type="target" position={Position.Top} className="!bg-teal-500 !w-3 !h-3" />
       <div className="text-xs font-semibold text-teal-700 mb-1">
-        Reaction {data.index + 1}
+        {title}
       </div>
       <div className="text-xs font-mono text-gray-700 leading-snug break-words">
         {data.equation}
@@ -108,6 +111,7 @@ export default function ReactionNetworkGraph({
           label: node.label.slice(0, 50),
           equation: node.reaction.equation,
           index: nodes.indexOf(node),
+          displayName: node.displayName,
         },
       };
     });

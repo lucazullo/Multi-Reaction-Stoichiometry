@@ -79,6 +79,7 @@ export interface ReactionNode {
   id: string;
   reaction: BalancedReaction;
   label: string; // user's original description
+  displayName?: string; // optional user-given name, e.g. "Boudouard Reaction"
 }
 
 export interface SeriesLink {

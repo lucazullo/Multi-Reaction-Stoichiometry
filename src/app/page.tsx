@@ -139,6 +139,15 @@ export default function Home() {
     setSystemEcon(null);
   };
 
+  const handleRenameReaction = (id: string, name: string) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id ? { ...n, displayName: name || undefined } : n
+      ),
+    }));
+  };
+
   const handleAddLink = (link: Omit<SeriesLink, "id">) => {
     const newLink: SeriesLink = { ...link, id: `link-${nextLinkId++}` };
     setSystem((prev) => ({ ...prev, links: [...prev.links, newLink] }));
@@ -334,7 +343,7 @@ export default function Home() {
                   {incomingLinks.map((link) => (
                     <LinkBadge key={link.id} link={link} nodes={system.nodes} onDelete={handleDeleteLink} />
                   ))}
-                  <ReactionCard node={node} index={i} onDelete={handleDeleteReaction} />
+                  <ReactionCard node={node} index={i} onDelete={handleDeleteReaction} onRename={handleRenameReaction} />
                 </div>
               );
             })}
@@ -369,12 +378,16 @@ export default function Home() {
           <ValidationWarnings warnings={validateSystem(system)} />
         )}
 
-        {/* Reaction Network Graph */}
+        {/* Reaction Network Graph (collapsible) */}
         {system.nodes.length >= 2 && (
-          <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-lg font-semibold text-gray-800">Reaction Network</h2>
-            <ReactionNetworkGraph system={system} />
-          </section>
+          <details className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <summary className="px-6 py-3 bg-slate-50 border-b border-gray-200 text-sm font-semibold text-gray-700 cursor-pointer hover:bg-slate-100 transition">
+              Reaction Network
+            </summary>
+            <div className="p-4">
+              <ReactionNetworkGraph system={system} />
+            </div>
+          </details>
         )}
 
         {/* System Input */}
@@ -624,7 +637,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.11 — April 2026</p>
+        <p>Version 1.12 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
