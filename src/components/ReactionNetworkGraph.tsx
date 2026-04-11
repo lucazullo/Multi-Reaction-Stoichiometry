@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useCallback } from "react";
+import { toPng } from "html-to-image";
 import {
   ReactFlow,
   Background,
@@ -288,104 +289,51 @@ function GraphInner({ system }: { system: ReactionSystem }) {
     setTimeout(() => fitView({ padding: 0.12, duration: 200 }), 250);
   }, [graphNodes.length, graphEdges.length, fitView]);
 
-  const handleDownloadPNG = () => {
+  const handleDownloadPNG = useCallback(() => {
     if (!containerRef.current) return;
 
-    // Fallback: Canvas 2D text rendering (reliable across all browsers)
-    const rect = containerRef.current.getBoundingClientRect();
-    const scale = 2;
-    const canvas = document.createElement("canvas");
-    canvas.width = rect.width * scale;
-    canvas.height = rect.height * scale;
-    const ctx = canvas.getContext("2d")!;
-    ctx.scale(scale, scale);
+    // Find the React Flow viewport element which contains the visual graph
+    const viewport = containerRef.current.querySelector(
+      ".react-flow__viewport"
+    ) as HTMLElement | null;
+    const target = viewport ?? containerRef.current;
 
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, rect.width, rect.height);
-
-    // Title
-    ctx.font = "bold 18px sans-serif";
-    ctx.fillStyle = "#1f2937";
-    ctx.fillText("Reaction Network", 30, 30);
-
-    let y = 60;
-
-    // Feedstocks
-    ctx.font = "bold 12px sans-serif";
-    ctx.fillStyle = "#3b82f6";
-    ctx.fillText("Feedstocks:", 30, y); y += 18;
-    ctx.font = "12px monospace";
-    const feedstocks = new Set<string>();
-    for (const node of system.nodes) {
-      for (let ri = 0; ri < node.reaction.reactants.length; ri++) {
-        const key = `${node.id}:${ri}`;
-        const isLinked = system.links.some(l => l.toReactionId === node.id && l.toReactantIndex === ri);
-        if (!isLinked) feedstocks.add(`${node.reaction.reactants[ri].formula} (${node.reaction.reactants[ri].name})`);
-      }
-    }
-    for (const fs of feedstocks) { ctx.fillText(`  ${fs}`, 30, y); y += 16; }
-    y += 10;
-
-    // Reactions
-    ctx.font = "bold 12px sans-serif";
-    ctx.fillStyle = "#0d9488";
-    ctx.fillText("Reactions:", 30, y); y += 18;
-    for (const node of system.nodes) {
-      const idx = system.nodes.indexOf(node) + 1;
-      const title = node.displayName ? `${idx}. ${node.displayName}` : `${idx}.`;
-      ctx.font = "bold 12px sans-serif";
-      ctx.fillStyle = "#0d9488";
-      ctx.fillText(title, 30, y); y += 16;
-      ctx.font = "12px monospace";
-      ctx.fillStyle = "#374151";
-      ctx.fillText(`   ${node.reaction.equation}`, 30, y); y += 20;
-    }
-    y += 10;
-
-    // Links
-    if (system.links.length > 0) {
-      ctx.font = "bold 12px sans-serif";
-      ctx.fillStyle = "#7c3aed";
-      ctx.fillText("Links:", 30, y); y += 18;
-      ctx.font = "12px monospace";
-      for (const link of system.links) {
-        const from = system.nodes.find(n => n.id === link.fromReactionId);
-        const to = system.nodes.find(n => n.id === link.toReactionId);
-        const prod = from?.reaction.products[link.fromProductIndex];
-        const pct = Math.round(link.fraction * 100);
-        ctx.fillText(`  Rxn ${system.nodes.indexOf(from!) + 1} → Rxn ${system.nodes.indexOf(to!) + 1}: ${prod?.formula ?? '?'} (${pct}%)`, 30, y);
-        y += 16;
-      }
-      y += 10;
-    }
-
-    // Products
-    ctx.font = "bold 12px sans-serif";
-    ctx.fillStyle = "#22c55e";
-    ctx.fillText("Products:", 30, y); y += 18;
-    ctx.font = "12px monospace";
-    const products = new Set<string>();
-    for (const node of system.nodes) {
-      for (let pi = 0; pi < node.reaction.products.length; pi++) {
-        const key = `${node.id}:${pi}`;
-        const isLinked = system.links.some(l => l.fromReactionId === node.id && l.fromProductIndex === pi);
-        if (!isLinked) products.add(`${node.reaction.products[pi].formula} (${node.reaction.products[pi].name})`);
-      }
-    }
-    for (const pr of products) { ctx.fillText(`  ${pr}`, 30, y); y += 16; }
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "reaction-network.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, "image/png");
-  };
+    toPng(target, {
+      backgroundColor: "#ffffff",
+      pixelRatio: 2,
+      style: {
+        // Ensure the viewport renders at its full extent
+        width: containerRef.current.offsetWidth + "px",
+        height: containerRef.current.offsetHeight + "px",
+      },
+    })
+      .then((dataUrl) => {
+        const a = document.createElement("a");
+        a.href = dataUrl;
+        a.download = "reaction-network.png";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      })
+      .catch(() => {
+        // Fallback: capture the entire container
+        toPng(containerRef.current!, {
+          backgroundColor: "#ffffff",
+          pixelRatio: 2,
+        })
+          .then((dataUrl) => {
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = "reaction-network.png";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          })
+          .catch(() => {
+            alert("Could not export graph as PNG.");
+          });
+      });
+  }, []);
 
   const totalLevels = Math.max(...graphNodes.map((n) => n.position.y), 200);
 
