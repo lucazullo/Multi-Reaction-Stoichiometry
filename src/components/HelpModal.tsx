@@ -146,17 +146,19 @@ export default function HelpModal({ onClose }: HelpModalProps) {
               in the browser:
             </p>
             <ul className="list-disc list-inside space-y-1 mt-2">
-              <li><strong>Save As</strong> — Save the current state with a new name.</li>
-              <li><strong>Save</strong> — Overwrite the currently loaded session (appears when working on a loaded session).</li>
+              <li><strong>Save</strong> (teal) — Save the current state to the browser with a name. If a session is already loaded, overwrites it.</li>
+              <li><strong>Save to File</strong> (blue) — Save to the browser AND download as a <code>.stoich.json</code> file.
+                On Chrome/Edge, a Save As dialog lets you choose the folder and filename.
+                On Safari/Firefox, the file goes to your default downloads folder.</li>
               <li><strong>Load</strong> — Restore a previously saved session including all reactions, links, results, input values, and economics prices.</li>
-              <li><strong>Export</strong> — Download a session as a <code>.stoich.json</code> file to share with others or transfer to another browser/device.</li>
+              <li><strong>Export</strong> — Download an existing saved session as a <code>.stoich.json</code> file to share with others or transfer to another browser/device.</li>
               <li><strong>Import</strong> — Load a <code>.stoich.json</code> file from disk into your saved sessions.</li>
               <li><strong>Delete</strong> — Remove a saved session.</li>
             </ul>
             <p className="mt-2 text-xs text-gray-500">
               Sessions are stored in your browser&rsquo;s local storage. They persist across page
-              refreshes but are specific to this browser and device. Use Export/Import to share
-              sessions or move them between devices.
+              refreshes but are specific to this browser and device. Use Save to File/Export/Import
+              to share sessions between users or move them between devices.
             </p>
           </section>
 
