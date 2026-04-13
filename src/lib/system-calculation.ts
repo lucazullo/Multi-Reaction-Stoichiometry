@@ -1,6 +1,9 @@
 import type {
+  AtomBalance,
+  BalanceCheck,
   CalculationInput,
   CalculationResult,
+  MassBalance,
   ReactionSystem,
   SeriesLink,
   SubstanceTotals,
@@ -12,7 +15,7 @@ import {
   calculateStoichiometry,
   calculateThermodynamics,
 } from "./conversion";
-import { normalizeFormula } from "./utils";
+import { normalizeFormula, parseAtoms } from "./utils";
 
 /**
  * Calculate the full reaction system starting from any reaction + substance.
@@ -182,7 +185,9 @@ export function calculateSystem(
     debugLines.push(`  ${normalizeFormula(t.formula)}: produced=${t.produced.toPrecision(4)}, consumed=${t.consumed.toPrecision(4)}, net=${t.totalMoles.toPrecision(4)}, role=${t.role}`);
   }
 
-  return { perReaction, totals, debugInfo: debugLines.join("\n") };
+  const balanceCheck = checkBalance(perReaction);
+
+  return { perReaction, totals, balanceCheck, debugInfo: debugLines.join("\n") };
 }
 
 /**
@@ -237,6 +242,84 @@ function topologicalBackward(
  * Aggregate all substances across reactions into net totals.
  * Tracks excess/deficit for linked substances.
  */
+/**
+ * Check atom-level and mass-level balance across all reactions.
+ * For a correctly balanced system, atoms in = atoms out and mass in = mass out.
+ */
+function checkBalance(
+  perReaction: Map<string, CalculationResult[]>
+): BalanceCheck {
+  const TOLERANCE = 0.01; // 1% relative tolerance
+
+  // Atom balance: sum atoms on each side across all reactions
+  const atomsConsumed = new Map<string, number>();
+  const atomsProduced = new Map<string, number>();
+  let totalMassIn = 0;  // grams
+  let totalMassOut = 0;
+
+  for (const [, results] of perReaction) {
+    for (const r of results) {
+      const atoms = parseAtoms(r.substance.formula);
+      const massGrams = r.moles * r.substance.molarMass;
+
+      if (r.substance.role === "reactant") {
+        totalMassIn += massGrams;
+        for (const [atom, count] of atoms) {
+          atomsConsumed.set(atom, (atomsConsumed.get(atom) ?? 0) + count * r.moles);
+        }
+      } else {
+        totalMassOut += massGrams;
+        for (const [atom, count] of atoms) {
+          atomsProduced.set(atom, (atomsProduced.get(atom) ?? 0) + count * r.moles);
+        }
+      }
+    }
+  }
+
+  // Build atom balance report
+  const allAtoms = new Set([...atomsConsumed.keys(), ...atomsProduced.keys()]);
+  const atomBalances: AtomBalance[] = [];
+  let allAtomsBalanced = true;
+
+  for (const atom of allAtoms) {
+    const prod = atomsProduced.get(atom) ?? 0;
+    const cons = atomsConsumed.get(atom) ?? 0;
+    const delta = prod - cons;
+    const maxVal = Math.max(Math.abs(prod), Math.abs(cons), 1e-10);
+    const balanced = Math.abs(delta) / maxVal < TOLERANCE;
+    if (!balanced) allAtomsBalanced = false;
+    atomBalances.push({ atom, produced: prod, consumed: cons, delta, balanced });
+  }
+
+  // Sort atoms: C, H, O, N first, then alphabetical
+  const atomOrder: Record<string, number> = { C: 0, H: 1, O: 2, N: 3 };
+  atomBalances.sort((a, b) => {
+    const oa = atomOrder[a.atom] ?? 99;
+    const ob = atomOrder[b.atom] ?? 99;
+    if (oa !== ob) return oa - ob;
+    return a.atom.localeCompare(b.atom);
+  });
+
+  // Mass balance
+  const massDelta = totalMassOut - totalMassIn;
+  const massDeltaPercent = totalMassIn > 0 ? (massDelta / totalMassIn) * 100 : 0;
+  const massBalanced = Math.abs(massDeltaPercent) < TOLERANCE * 100;
+
+  const mass: MassBalance = {
+    totalMassIn,
+    totalMassOut,
+    delta: massDelta,
+    deltaPercent: massDeltaPercent,
+    balanced: massBalanced,
+  };
+
+  return {
+    atoms: atomBalances,
+    mass,
+    allBalanced: allAtomsBalanced && massBalanced,
+  };
+}
+
 function aggregateSubstances(
   system: ReactionSystem,
   perReaction: Map<string, CalculationResult[]>

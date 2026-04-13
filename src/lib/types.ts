@@ -114,8 +114,31 @@ export interface SubstanceTotals {
   note?: string;
 }
 
+export interface AtomBalance {
+  atom: string;
+  produced: number;  // total atoms produced across all reactions
+  consumed: number;  // total atoms consumed across all reactions
+  delta: number;     // produced - consumed (should be ~0)
+  balanced: boolean; // |delta| / max(produced, consumed) < tolerance
+}
+
+export interface MassBalance {
+  totalMassIn: number;   // grams of all reactants consumed
+  totalMassOut: number;  // grams of all products produced
+  delta: number;         // out - in (should be ~0)
+  deltaPercent: number;  // delta as % of totalMassIn
+  balanced: boolean;     // |deltaPercent| < tolerance
+}
+
+export interface BalanceCheck {
+  atoms: AtomBalance[];
+  mass: MassBalance;
+  allBalanced: boolean;
+}
+
 export interface SystemCalculationResult {
   perReaction: Map<string, CalculationResult[]>;
+  balanceCheck: BalanceCheck;
   totals: SubstanceTotals[];
   debugInfo?: string;
 }

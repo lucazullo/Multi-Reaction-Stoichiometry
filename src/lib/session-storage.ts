@@ -77,11 +77,16 @@ function serializeResult(
 }
 
 function deserializeResult(
-  data: SerializedSystemResult
+  data: SerializedSystemResult & { balanceCheck?: SystemCalculationResult["balanceCheck"] }
 ): SystemCalculationResult {
   return {
     perReaction: new Map(data.perReaction),
     totals: data.totals,
+    balanceCheck: data.balanceCheck ?? {
+      atoms: [],
+      mass: { totalMassIn: 0, totalMassOut: 0, delta: 0, deltaPercent: 0, balanced: true },
+      allBalanced: true,
+    },
   };
 }
 

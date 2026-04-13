@@ -35,6 +35,7 @@ import LinkBadge from "@/components/LinkBadge";
 import LinkEditor from "@/components/LinkEditor";
 import SystemInput from "@/components/SystemInput";
 import SystemTotalsTable from "@/components/SystemTotalsTable";
+import BalanceCheckDisplay from "@/components/BalanceCheckDisplay";
 import SystemEquationSummary from "@/components/SystemEquationSummary";
 import ResultsTable from "@/components/ResultsTable";
 import ThermodynamicsDisplay from "@/components/ThermodynamicsDisplay";
@@ -500,6 +501,14 @@ export default function Home() {
                   <SystemTotalsTable totals={systemResult.totals} />
                 </section>
 
+                {/* Balance Check */}
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-gray-800">Balance Check</h2>
+                  </div>
+                  <BalanceCheckDisplay balanceCheck={systemResult.balanceCheck} />
+                </section>
+
               </div>
             )}
 
@@ -658,7 +667,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.14b — April 2026</p>
+        <p>Version 1.15 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing</p>
         <p>
           Questions or suggestions?{" "}
