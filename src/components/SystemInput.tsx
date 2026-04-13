@@ -22,6 +22,13 @@ export default function SystemInput({
   const [amount, setAmount] = useState(initialInput ? String(initialInput.amount) : "");
   const [unit, setUnit] = useState<AmountUnit>(initialInput?.unit ?? "g");
 
+  // Sync reactionId when nodes change (e.g., first reaction added)
+  useEffect(() => {
+    if (!reactionId || !nodes.find((n) => n.id === reactionId)) {
+      if (nodes.length > 0) setReactionId(nodes[0].id);
+    }
+  }, [nodes, reactionId]);
+
   // Restore values when initial props change (e.g., session load)
   useEffect(() => {
     if (initialReactionId) setReactionId(initialReactionId);
