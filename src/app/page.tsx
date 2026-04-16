@@ -98,7 +98,7 @@ export default function Home() {
   const [startInput, setStartInput] = useState<CalculationInput | null>(null);
 
   // Graph layout (persisted positions + colors)
-  const [graphLayout, setGraphLayout] = useState<GraphLayout>({});
+  const [graphLayout, setGraphLayout] = useState<GraphLayout>({ nodes: {}, edges: {} });
 
   // Session tracking
   const [currentSessionName, setCurrentSessionName] = useState<string | null>(null);
@@ -313,7 +313,7 @@ export default function Home() {
     setError(null);
     setCurrentSessionName(null);
     setSavedPrices([]);
-    setGraphLayout({});
+    setGraphLayout({ nodes: {}, edges: {} });
     nextNodeId = 0;
     nextLinkId = 0;
   };
@@ -372,7 +372,7 @@ export default function Home() {
     setStartReactionId(snapshot.startReactionId);
     setStartInput(snapshot.startInput);
     setSavedPrices(snapshot.savedPrices ?? []);
-    setGraphLayout(snapshot.graphLayout ?? {});
+    setGraphLayout(snapshot.graphLayout ?? { nodes: {}, edges: {} });
     setError(null);
     setActiveTab(snapshot.systemResult ? "per-reaction" : "per-reaction");
     nextNodeId = snapshot.nextNodeId;
@@ -1131,7 +1131,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>ReactionIQ — v2.09 — April 2026</p>
+        <p>ReactionIQ — v2.09a — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions, suggestions, bug reports, or feature requests?{" "}

@@ -18,65 +18,38 @@ import {
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ReactionSystem, GraphLayout, HandleSide } from "@/lib/types";
+import type { ReactionSystem, GraphLayout, HandleSide, GraphEdgeLayout } from "@/lib/types";
 import { normalizeFormula } from "@/lib/utils";
 
 // --- Color Palettes ---
 
 const REACTION_COLORS = [
-  "#ef4444", // Red
-  "#f97316", // Orange
-  "#f59e0b", // Amber
-  "#eab308", // Yellow
-  "#84cc16", // Lime
-  "#22c55e", // Green
-  "#10b981", // Emerald
-  "#14b8a6", // Teal (legacy default)
-  "#06b6d4", // Cyan
-  "#3b82f6", // Blue
-  "#6366f1", // Indigo
-  "#8b5cf6", // Purple
-  "#a855f7", // Violet
-  "#d946ef", // Fuchsia
-  "#ec4899", // Pink
-  "#f43f5e", // Rose
-  "#64748b", // Slate
-  "#78716c", // Stone
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6",
+  "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6",
+  "#a855f7", "#d946ef", "#ec4899", "#f43f5e",
+  "#64748b", "#78716c",
 ];
 
 const SUBSTANCE_COLORS = [
-  "#3b82f6", // Blue
-  "#06b6d4", // Cyan
-  "#6366f1", // Indigo
-  "#8b5cf6", // Purple
-  "#14b8a6", // Teal
-  "#22c55e", // Green
-  "#84cc16", // Lime
-  "#f59e0b", // Amber
-  "#f97316", // Orange
-  "#ef4444", // Red
-  "#ec4899", // Pink
-  "#64748b", // Slate
+  "#3b82f6", "#06b6d4", "#6366f1", "#8b5cf6",
+  "#14b8a6", "#22c55e", "#84cc16", "#f59e0b",
+  "#f97316", "#ef4444", "#ec4899", "#64748b",
 ];
 
-// Default colors for exothermic/endothermic reactions
-const EXOTHERMIC_COLOR = "#ef4444"; // Red
-const ENDOTHERMIC_COLOR = "#3b82f6"; // Blue
-const NEUTRAL_COLOR = "#14b8a6"; // Teal (legacy default, for zero or unknown ΔH)
+const EXOTHERMIC_COLOR = "#ef4444";
+const ENDOTHERMIC_COLOR = "#3b82f6";
+const NEUTRAL_COLOR = "#14b8a6";
 
-/** Compute reaction deltaH from enthalpies of formation */
 function computeDeltaH(
   reactants: { coefficient: number; enthalpyOfFormation: number }[],
   products: { coefficient: number; enthalpyOfFormation: number }[]
 ): number | null {
   const sumProducts = products.reduce((s, p) => s + p.coefficient * (p.enthalpyOfFormation ?? 0), 0);
   const sumReactants = reactants.reduce((s, r) => s + r.coefficient * (r.enthalpyOfFormation ?? 0), 0);
-  // If all enthalpies are zero, we can't determine — return null
   if (sumProducts === 0 && sumReactants === 0) return null;
   return sumProducts - sumReactants;
 }
-
-// --- Handle position helpers ---
 
 const SIDE_TO_POSITION: Record<HandleSide, Position> = {
   top: Position.Top,
@@ -85,20 +58,13 @@ const SIDE_TO_POSITION: Record<HandleSide, Position> = {
   right: Position.Right,
 };
 
-const SIDE_CYCLE: HandleSide[] = ["top", "right", "bottom", "left"];
-
-function nextSide(current: HandleSide): HandleSide {
-  const idx = SIDE_CYCLE.indexOf(current);
-  return SIDE_CYCLE[(idx + 1) % SIDE_CYCLE.length];
-}
-
 interface ReactionNetworkGraphProps {
   system: ReactionSystem;
   graphLayout?: GraphLayout;
   onLayoutChange?: (layout: GraphLayout) => void;
 }
 
-// --- Color Picker Popover ---
+// --- Color Picker (expanded, all colors visible) ---
 function ColorPicker({
   colors,
   currentColor,
@@ -110,51 +76,127 @@ function ColorPicker({
   onSelect: (color: string) => void;
   onClose: () => void;
 }) {
+  // Close on click outside
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as globalThis.Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
   return (
     <div
-      className="absolute z-50 top-full left-0 mt-1 grid grid-cols-6 gap-1.5 rounded-lg border border-gray-200 bg-white p-2 shadow-lg"
+      ref={ref}
+      className="absolute z-50 top-full left-0 mt-1 rounded-lg border border-gray-200 bg-white p-3 shadow-lg"
+      style={{ minWidth: Math.min(colors.length, 9) * 32 + 16 }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {colors.map((c) => (
-        <button
-          key={c}
-          onClick={(e) => { e.stopPropagation(); onSelect(c); onClose(); }}
-          className="h-5 w-5 rounded-full border-2 transition-transform hover:scale-125"
-          style={{
-            backgroundColor: c,
-            borderColor: currentColor === c ? "#1e293b" : c,
-            boxShadow: currentColor === c ? "0 0 0 2px #e2e8f0" : "none",
-          }}
-        />
-      ))}
+      <div className="flex flex-wrap gap-2">
+        {colors.map((c) => (
+          <button
+            key={c}
+            onClick={(e) => { e.stopPropagation(); onSelect(c); onClose(); }}
+            className="h-6 w-6 rounded-full border-2 transition-all hover:scale-110"
+            style={{
+              backgroundColor: c,
+              borderColor: currentColor === c ? "#1e293b" : "transparent",
+              boxShadow: currentColor === c ? "0 0 0 2px #cbd5e1" : "none",
+            }}
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-// --- Handle Side Toggle Button ---
-function HandleToggle({
-  side,
-  label,
-  onCycle,
+// --- Edge Editor Popover (shown when clicking an edge) ---
+function EdgeEditor({
+  edgeId,
+  sourceLabel,
+  targetLabel,
+  currentSourceSide,
+  currentTargetSide,
+  position,
+  onChangeSide,
+  onClose,
 }: {
-  side: HandleSide;
-  label: string;
-  onCycle: () => void;
+  edgeId: string;
+  sourceLabel: string;
+  targetLabel: string;
+  currentSourceSide: HandleSide;
+  currentTargetSide: HandleSide;
+  position: { x: number; y: number };
+  onChangeSide: (edgeId: string, which: "source" | "target", side: HandleSide) => void;
+  onClose: () => void;
 }) {
-  const arrows: Record<HandleSide, string> = { top: "↑", right: "→", bottom: "↓", left: "←" };
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as globalThis.Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose]);
+
+  const sides: { side: HandleSide; icon: string }[] = [
+    { side: "top", icon: "↑" },
+    { side: "right", icon: "→" },
+    { side: "bottom", icon: "↓" },
+    { side: "left", icon: "←" },
+  ];
+
   return (
-    <button
-      title={`${label}: ${side} — click to cycle`}
-      onClick={(e) => { e.stopPropagation(); onCycle(); }}
-      onMouseDown={(e) => e.stopPropagation()}
-      className="h-4 w-4 rounded text-[9px] font-bold leading-none bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 transition flex items-center justify-center"
+    <div
+      ref={ref}
+      className="fixed z-[100] rounded-lg border border-gray-200 bg-white p-3 shadow-xl text-xs"
+      style={{ left: position.x, top: position.y, transform: "translate(-50%, -100%) translateY(-8px)" }}
     >
-      {arrows[side]}
-    </button>
+      <p className="font-semibold text-gray-700 mb-2 text-center">Edge connection points</p>
+      <div className="space-y-2">
+        <div>
+          <p className="text-gray-500 mb-1">From: <span className="font-medium text-gray-700">{sourceLabel}</span></p>
+          <div className="flex gap-1">
+            {sides.map(({ side, icon }) => (
+              <button
+                key={side}
+                onClick={() => onChangeSide(edgeId, "source", side)}
+                className={`h-7 w-7 rounded flex items-center justify-center text-sm font-bold transition ${
+                  currentSourceSide === side
+                    ? "bg-purple-100 text-purple-700 ring-1 ring-purple-400"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-gray-500 mb-1">To: <span className="font-medium text-gray-700">{targetLabel}</span></p>
+          <div className="flex gap-1">
+            {sides.map(({ side, icon }) => (
+              <button
+                key={side}
+                onClick={() => onChangeSide(edgeId, "target", side)}
+                className={`h-7 w-7 rounded flex items-center justify-center text-sm font-bold transition ${
+                  currentTargetSide === side
+                    ? "bg-purple-100 text-purple-700 ring-1 ring-purple-400"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {icon}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-// --- Custom Nodes ---
+// --- Custom Nodes (4 handles each, no toggle buttons) ---
 
 function ReactionNodeComponent({
   id,
@@ -167,10 +209,7 @@ function ReactionNodeComponent({
     index: number;
     displayName?: string;
     color?: string;
-    sourcePos: HandleSide;
-    targetPos: HandleSide;
     onColorChange?: (nodeId: string, color: string) => void;
-    onHandleChange?: (nodeId: string, which: "source" | "target", side: HandleSide) => void;
   };
 }) {
   const [showPicker, setShowPicker] = useState(false);
@@ -179,24 +218,29 @@ function ReactionNodeComponent({
     ? `Reaction ${data.index + 1} — ${data.displayName}`
     : `Reaction ${data.index + 1}`;
 
-  const sourcePos = SIDE_TO_POSITION[data.sourcePos];
-  const targetPos = SIDE_TO_POSITION[data.targetPos];
+  const handleStyle = (bg: string) => ({ background: bg, width: 10, height: 10 });
 
   return (
     <div
       className="relative rounded-lg border-2 bg-white px-4 py-3 shadow-md min-w-[180px] max-w-[280px]"
       style={{ borderColor: color }}
     >
-      {/* Handles on the active sides */}
-      <Handle id="target" type="target" position={targetPos} style={{ background: color, width: 12, height: 12 }} />
-      <Handle id="source" type="source" position={sourcePos} style={{ background: color, width: 12, height: 12 }} />
+      {/* 4 target handles + 4 source handles on all sides */}
+      <Handle id="target-top" type="target" position={Position.Top} style={handleStyle(color)} />
+      <Handle id="target-right" type="target" position={Position.Right} style={{ ...handleStyle(color), top: "30%" }} />
+      <Handle id="target-bottom" type="target" position={Position.Bottom} style={handleStyle(color)} />
+      <Handle id="target-left" type="target" position={Position.Left} style={{ ...handleStyle(color), top: "30%" }} />
+      <Handle id="source-top" type="source" position={Position.Top} style={{ ...handleStyle(color), left: "60%" }} />
+      <Handle id="source-right" type="source" position={Position.Right} style={{ ...handleStyle(color), top: "70%" }} />
+      <Handle id="source-bottom" type="source" position={Position.Bottom} style={handleStyle(color)} />
+      <Handle id="source-left" type="source" position={Position.Left} style={{ ...handleStyle(color), top: "70%" }} />
 
       <div className="flex items-center gap-1.5 mb-1">
         <div className="relative">
           <button
             title="Change color"
             onClick={(e) => { e.stopPropagation(); setShowPicker(!showPicker); }}
-            className="h-3 w-3 rounded-full border border-gray-300 flex-shrink-0 hover:scale-125 transition-transform"
+            className="h-3.5 w-3.5 rounded-full border border-gray-300 flex-shrink-0 hover:scale-125 transition-transform"
             style={{ backgroundColor: color }}
             onMouseDown={(e) => e.stopPropagation()}
           />
@@ -210,18 +254,6 @@ function ReactionNodeComponent({
           )}
         </div>
         <div className="text-xs font-semibold flex-1" style={{ color }}>{title}</div>
-        <div className="flex gap-0.5" title="Arrow connection points">
-          <HandleToggle
-            side={data.targetPos}
-            label="In"
-            onCycle={() => data.onHandleChange?.(id, "target", nextSide(data.targetPos))}
-          />
-          <HandleToggle
-            side={data.sourcePos}
-            label="Out"
-            onCycle={() => data.onHandleChange?.(id, "source", nextSide(data.sourcePos))}
-          />
-        </div>
       </div>
       <div className="text-xs font-mono text-gray-700 leading-snug break-words">{data.equation}</div>
     </div>
@@ -237,19 +269,22 @@ function FeedstockNodeComponent({
     formula: string;
     name: string;
     color?: string;
-    sourcePos: HandleSide;
     onColorChange?: (nodeId: string, color: string) => void;
-    onHandleChange?: (nodeId: string, which: "source" | "target", side: HandleSide) => void;
   };
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const color = data.color || "#3b82f6";
-  const sourcePos = SIDE_TO_POSITION[data.sourcePos];
+  const handleStyle = (bg: string) => ({ background: bg, width: 8, height: 8 });
+
   return (
     <div
       className="relative flex items-center justify-center rounded-full border-2 px-5 py-2.5 shadow-sm min-w-[90px]"
       style={{ borderColor: color, backgroundColor: `${color}10` }}
     >
+      <Handle id="source-top" type="source" position={Position.Top} style={handleStyle(color)} />
+      <Handle id="source-right" type="source" position={Position.Right} style={handleStyle(color)} />
+      <Handle id="source-bottom" type="source" position={Position.Bottom} style={handleStyle(color)} />
+      <Handle id="source-left" type="source" position={Position.Left} style={handleStyle(color)} />
       <div className="text-center">
         <div className="flex items-center justify-center gap-1">
           <div className="relative">
@@ -270,15 +305,9 @@ function FeedstockNodeComponent({
             )}
           </div>
           <div className="text-xs font-bold" style={{ color }}>{data.formula}</div>
-          <HandleToggle
-            side={data.sourcePos}
-            label="Out"
-            onCycle={() => data.onHandleChange?.(id, "source", nextSide(data.sourcePos))}
-          />
         </div>
         <div className="text-[9px]" style={{ color, opacity: 0.7 }}>{data.name}</div>
       </div>
-      <Handle id="source" type="source" position={sourcePos} style={{ background: color, width: 10, height: 10 }} />
     </div>
   );
 }
@@ -292,20 +321,22 @@ function ProductNodeComponent({
     formula: string;
     name: string;
     color?: string;
-    targetPos: HandleSide;
     onColorChange?: (nodeId: string, color: string) => void;
-    onHandleChange?: (nodeId: string, which: "source" | "target", side: HandleSide) => void;
   };
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const color = data.color || "#22c55e";
-  const targetPos = SIDE_TO_POSITION[data.targetPos];
+  const handleStyle = (bg: string) => ({ background: bg, width: 8, height: 8 });
+
   return (
     <div
       className="relative flex items-center justify-center rounded-full border-2 px-5 py-2.5 shadow-sm min-w-[90px]"
       style={{ borderColor: color, backgroundColor: `${color}10` }}
     >
-      <Handle id="target" type="target" position={targetPos} style={{ background: color, width: 10, height: 10 }} />
+      <Handle id="target-top" type="target" position={Position.Top} style={handleStyle(color)} />
+      <Handle id="target-right" type="target" position={Position.Right} style={handleStyle(color)} />
+      <Handle id="target-bottom" type="target" position={Position.Bottom} style={handleStyle(color)} />
+      <Handle id="target-left" type="target" position={Position.Left} style={handleStyle(color)} />
       <div className="text-center">
         <div className="flex items-center justify-center gap-1">
           <div className="relative">
@@ -326,11 +357,6 @@ function ProductNodeComponent({
             )}
           </div>
           <div className="text-xs font-bold" style={{ color }}>{data.formula}</div>
-          <HandleToggle
-            side={data.targetPos}
-            label="In"
-            onCycle={() => data.onHandleChange?.(id, "target", nextSide(data.targetPos))}
-          />
         </div>
         <div className="text-[9px]" style={{ color, opacity: 0.7 }}>{data.name}</div>
       </div>
@@ -344,15 +370,17 @@ const nodeTypes: NodeTypes = {
   product: ProductNodeComponent,
 };
 
+// --- Build Graph ---
+
 function buildGraph(
   system: ReactionSystem,
   savedLayout: GraphLayout | undefined,
-  onColorChange: (nodeId: string, color: string) => void,
-  onHandleChange: (nodeId: string, which: "source" | "target", side: HandleSide) => void
+  onColorChange: (nodeId: string, color: string) => void
 ) {
   const { nodes, links } = system;
+  const nodeLayouts = savedLayout?.nodes ?? {};
+  const edgeLayouts = savedLayout?.edges ?? {};
 
-  // Build link lookup
   const linkedProducts = new Set<string>();
   const linkedReactants = new Set<string>();
   for (const link of links) {
@@ -371,7 +399,6 @@ function buildGraph(
     inDegree.set(link.toReactionId, (inDegree.get(link.toReactionId) ?? 0) + 1);
     outgoing.get(link.fromReactionId)?.push(link.toReactionId);
   }
-
   const levels = new Map<string, number>();
   const queue: string[] = [];
   for (const [id, deg] of inDegree) {
@@ -403,15 +430,13 @@ function buildGraph(
   const centerX = 400;
 
   const pos = (nodeId: string, defaultX: number, defaultY: number) => {
-    const saved = savedLayout?.[nodeId];
+    const saved = nodeLayouts[nodeId];
     return saved ? { x: saved.x, y: saved.y } : { x: defaultX, y: defaultY };
   };
+  const colorOf = (nodeId: string) => nodeLayouts[nodeId]?.color;
 
-  const colorOf = (nodeId: string) => savedLayout?.[nodeId]?.color;
-  const sourcePosOf = (nodeId: string, fallback: HandleSide = "bottom"): HandleSide =>
-    savedLayout?.[nodeId]?.sourcePosition ?? fallback;
-  const targetPosOf = (nodeId: string, fallback: HandleSide = "top"): HandleSide =>
-    savedLayout?.[nodeId]?.targetPosition ?? fallback;
+  // Build a label map for nodes (used in edge editor)
+  const nodeLabelMap = new Map<string, string>();
 
   // --- Reaction nodes ---
   const graphNodes: Node[] = nodes.map((node) => {
@@ -422,13 +447,15 @@ function buildGraph(
     const defaultX = indexInGroup * xSpacing - groupWidth / 2 + centerX;
     const defaultY = level * ySpacing + 150;
 
-    // Determine default color from thermodynamics if no custom color set
     let defaultColor = NEUTRAL_COLOR;
     if (!colorOf(node.id)) {
       const deltaH = computeDeltaH(node.reaction.reactants, node.reaction.products);
       if (deltaH !== null && deltaH < -0.5) defaultColor = EXOTHERMIC_COLOR;
       else if (deltaH !== null && deltaH > 0.5) defaultColor = ENDOTHERMIC_COLOR;
     }
+
+    const label = node.displayName || `R${nodes.indexOf(node) + 1}`;
+    nodeLabelMap.set(node.id, label);
 
     return {
       id: node.id,
@@ -441,30 +468,30 @@ function buildGraph(
         index: nodes.indexOf(node),
         displayName: node.displayName,
         color: colorOf(node.id) || defaultColor,
-        sourcePos: sourcePosOf(node.id, "bottom"),
-        targetPos: targetPosOf(node.id, "top"),
         onColorChange,
-        onHandleChange,
       },
     };
   });
 
-  // --- Link edges (purple, between reactions) ---
+  // --- Link edges ---
   const graphEdges: Edge[] = links.map((link) => {
     const fromNode = nodes.find((n) => n.id === link.fromReactionId);
     const product = fromNode?.reaction.products[link.fromProductIndex];
     const pct = Math.round(link.fraction * 100);
     const label = product ? `${product.formula} (${pct}%)` : `${pct}%`;
+    const el = edgeLayouts[link.id];
+    const sourceSide: HandleSide = el?.sourceSide ?? "bottom";
+    const targetSide: HandleSide = el?.targetSide ?? "top";
 
     return {
       id: link.id,
       source: link.fromReactionId,
       target: link.toReactionId,
-      sourceHandle: "source",
-      targetHandle: "target",
+      sourceHandle: `source-${sourceSide}`,
+      targetHandle: `target-${targetSide}`,
       label,
       animated: true,
-      style: { stroke: "#8b5cf6", strokeWidth: 2 },
+      style: { stroke: "#8b5cf6", strokeWidth: 2, cursor: "pointer" },
       labelStyle: { fontSize: 10, fontFamily: "monospace", fill: "#6d28d9" },
       labelBgStyle: { fill: "#f5f3ff", fillOpacity: 0.9 },
       labelBgPadding: [6, 3] as [number, number],
@@ -472,7 +499,7 @@ function buildGraph(
     };
   });
 
-  // --- Deduplicated feedstock nodes ---
+  // --- Feedstock nodes ---
   const feedstockMap = new Map<string, { formula: string; name: string; targetReactions: string[] }>();
   for (const node of nodes) {
     for (let ri = 0; ri < node.reaction.reactants.length; ri++) {
@@ -487,35 +514,38 @@ function buildGraph(
       }
     }
   }
-
   const feedstocks = Array.from(feedstockMap.entries());
   const feedstockWidth = (feedstocks.length - 1) * 160;
   feedstocks.forEach(([key, fs], i) => {
     const nodeId = `feedstock-${key}`;
     const defaultX = i * 160 - feedstockWidth / 2 + centerX;
-    const srcPos = sourcePosOf(nodeId, "bottom");
+    nodeLabelMap.set(nodeId, fs.formula);
     graphNodes.push({
       id: nodeId,
       type: "feedstock",
       position: pos(nodeId, defaultX, 0),
       draggable: true,
-      data: { formula: fs.formula, name: fs.name, color: colorOf(nodeId), sourcePos: srcPos, onColorChange, onHandleChange },
+      data: { formula: fs.formula, name: fs.name, color: colorOf(nodeId), onColorChange },
     });
     for (const targetId of fs.targetReactions) {
+      const edgeId = `edge-fs-${key}-${targetId}`;
       const edgeColor = colorOf(nodeId) || "#3b82f6";
+      const el = edgeLayouts[edgeId];
+      const sourceSide: HandleSide = el?.sourceSide ?? "bottom";
+      const targetSide: HandleSide = el?.targetSide ?? "top";
       graphEdges.push({
-        id: `edge-fs-${key}-${targetId}`,
+        id: edgeId,
         source: nodeId,
         target: targetId,
-        sourceHandle: "source",
-        targetHandle: "target",
-        style: { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: "6 3" },
+        sourceHandle: `source-${sourceSide}`,
+        targetHandle: `target-${targetSide}`,
+        style: { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: "6 3", cursor: "pointer" },
         markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
       });
     }
   });
 
-  // --- Deduplicated product nodes ---
+  // --- Product nodes ---
   const productMap = new Map<string, { formula: string; name: string; sourceReactions: string[] }>();
   for (const node of nodes) {
     for (let pi = 0; pi < node.reaction.products.length; pi++) {
@@ -530,36 +560,39 @@ function buildGraph(
       }
     }
   }
-
   const products = Array.from(productMap.entries());
   const productWidth = (products.length - 1) * 160;
   const productY = (maxLevel + 1) * ySpacing + 150;
   products.forEach(([key, pr], i) => {
     const nodeId = `product-${key}`;
     const defaultX = i * 160 - productWidth / 2 + centerX;
-    const tgtPos = targetPosOf(nodeId, "top");
+    nodeLabelMap.set(nodeId, pr.formula);
     graphNodes.push({
       id: nodeId,
       type: "product",
       position: pos(nodeId, defaultX, productY),
       draggable: true,
-      data: { formula: pr.formula, name: pr.name, color: colorOf(nodeId), targetPos: tgtPos, onColorChange, onHandleChange },
+      data: { formula: pr.formula, name: pr.name, color: colorOf(nodeId), onColorChange },
     });
     for (const sourceId of pr.sourceReactions) {
+      const edgeId = `edge-pr-${key}-${sourceId}`;
       const edgeColor = colorOf(nodeId) || "#22c55e";
+      const el = edgeLayouts[edgeId];
+      const sourceSide: HandleSide = el?.sourceSide ?? "bottom";
+      const targetSide: HandleSide = el?.targetSide ?? "top";
       graphEdges.push({
-        id: `edge-pr-${key}-${sourceId}`,
+        id: edgeId,
         source: sourceId,
         target: nodeId,
-        sourceHandle: "source",
-        targetHandle: "target",
-        style: { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: "6 3" },
+        sourceHandle: `source-${sourceSide}`,
+        targetHandle: `target-${targetSide}`,
+        style: { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: "6 3", cursor: "pointer" },
         markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
       });
     }
   });
 
-  return { graphNodes, graphEdges };
+  return { graphNodes, graphEdges, nodeLabelMap };
 }
 
 /** Inner component with useReactFlow access */
@@ -574,9 +607,19 @@ function GraphInner({
 }) {
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
-  const layoutRef = useRef<GraphLayout>(graphLayout ?? {});
+  const layoutRef = useRef<GraphLayout>(graphLayout ?? { nodes: {}, edges: {} });
+  const [selectedEdge, setSelectedEdge] = useState<{
+    id: string;
+    sourceId: string;
+    targetId: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
-  // Shared layout updater
+  // Keep ref in sync with prop
+  useEffect(() => {
+    if (graphLayout) layoutRef.current = graphLayout;
+  }, [graphLayout]);
+
   const updateLayout = useCallback(
     (updater: (prev: GraphLayout) => GraphLayout) => {
       const updated = updater(layoutRef.current);
@@ -590,8 +633,8 @@ function GraphInner({
   const handleColorChange = useCallback(
     (nodeId: string, color: string) => {
       updateLayout((prev) => {
-        const existing = prev[nodeId] ?? { x: 0, y: 0 };
-        return { ...prev, [nodeId]: { ...existing, color } };
+        const existing = prev.nodes[nodeId] ?? { x: 0, y: 0 };
+        return { ...prev, nodes: { ...prev.nodes, [nodeId]: { ...existing, color } } };
       });
       setFlowNodes((nds) =>
         nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, color } } : n))
@@ -600,36 +643,37 @@ function GraphInner({
     [updateLayout]
   );
 
-  const handleHandleChange = useCallback(
-    (nodeId: string, which: "source" | "target", side: HandleSide) => {
+  const handleEdgeSideChange = useCallback(
+    (edgeId: string, which: "source" | "target", side: HandleSide) => {
       updateLayout((prev) => {
-        const existing = prev[nodeId] ?? { x: 0, y: 0 };
-        const key = which === "source" ? "sourcePosition" : "targetPosition";
-        return { ...prev, [nodeId]: { ...existing, [key]: side } };
+        const existing = prev.edges[edgeId] ?? {};
+        const key = which === "source" ? "sourceSide" : "targetSide";
+        return { ...prev, edges: { ...prev.edges, [edgeId]: { ...existing, [key]: side } } };
       });
-      setFlowNodes((nds) =>
-        nds.map((n) => {
-          if (n.id !== nodeId) return n;
-          const dataKey = which === "source" ? "sourcePos" : "targetPos";
-          return { ...n, data: { ...n.data, [dataKey]: side } };
+      // Update edge handle in flow
+      setFlowEdges((eds) =>
+        eds.map((e) => {
+          if (e.id !== edgeId) return e;
+          const handleKey = which === "source" ? "sourceHandle" : "targetHandle";
+          const prefix = which === "source" ? "source-" : "target-";
+          return { ...e, [handleKey]: `${prefix}${side}` };
         })
       );
     },
     [updateLayout]
   );
 
-  const { graphNodes, graphEdges } = useMemo(
-    () => buildGraph(system, graphLayout, handleColorChange, handleHandleChange),
+  const { graphNodes, graphEdges, nodeLabelMap } = useMemo(
+    () => buildGraph(system, graphLayout, handleColorChange),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [system, graphLayout]
   );
 
   const [flowNodes, setFlowNodes] = useState<Node[]>(graphNodes);
-  const [flowEdges] = useState<Edge[]>(graphEdges);
+  const [flowEdges, setFlowEdges] = useState<Edge[]>(graphEdges);
 
-  useEffect(() => {
-    setFlowNodes(graphNodes);
-  }, [graphNodes]);
+  useEffect(() => { setFlowNodes(graphNodes); }, [graphNodes]);
+  useEffect(() => { setFlowEdges(graphEdges); }, [graphEdges]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
@@ -638,18 +682,12 @@ function GraphInner({
         const hasDragEnd = changes.some((c) => c.type === "position" && c.dragging === false);
         if (hasDragEnd) {
           updateLayout((prev) => {
-            const newLayout = { ...prev };
+            const newNodes = { ...prev.nodes };
             for (const node of updated) {
-              const existing = newLayout[node.id];
-              newLayout[node.id] = {
-                x: node.position.x,
-                y: node.position.y,
-                color: existing?.color,
-                sourcePosition: existing?.sourcePosition,
-                targetPosition: existing?.targetPosition,
-              };
+              const existing = newNodes[node.id];
+              newNodes[node.id] = { x: node.position.x, y: node.position.y, color: existing?.color };
             }
-            return newLayout;
+            return { ...prev, nodes: newNodes };
           });
         }
         return updated;
@@ -657,6 +695,26 @@ function GraphInner({
     },
     [updateLayout]
   );
+
+  // Handle edge click — show editor popover
+  const onEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      // Position the popover at click location
+      setSelectedEdge({
+        id: edge.id,
+        sourceId: edge.source,
+        targetId: edge.target,
+        position: { x: event.clientX, y: event.clientY },
+      });
+    },
+    []
+  );
+
+  // Close edge editor on pane click
+  const onPaneClick = useCallback(() => {
+    setSelectedEdge(null);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -676,25 +734,23 @@ function GraphInner({
   }, [graphNodes.length, graphEdges.length, fitView]);
 
   const handleResetLayout = useCallback(() => {
-    layoutRef.current = {};
-    onLayoutChange?.({});
-    const { graphNodes: fresh } = buildGraph(system, undefined, handleColorChange, handleHandleChange);
+    layoutRef.current = { nodes: {}, edges: {} };
+    onLayoutChange?.({ nodes: {}, edges: {} });
+    const { graphNodes: fresh, graphEdges: freshEdges } = buildGraph(system, undefined, handleColorChange);
     setFlowNodes(fresh);
+    setFlowEdges(freshEdges);
+    setSelectedEdge(null);
     setTimeout(() => fitView({ padding: 0.12, duration: 300 }), 50);
-  }, [system, onLayoutChange, fitView, handleColorChange, handleHandleChange]);
+  }, [system, onLayoutChange, fitView, handleColorChange]);
 
   const handleDownloadPNG = useCallback(() => {
     if (!containerRef.current) return;
     const viewport = containerRef.current.querySelector(".react-flow__viewport") as HTMLElement | null;
     const target = viewport ?? containerRef.current;
-
     toPng(target, {
       backgroundColor: "#ffffff",
       pixelRatio: 2,
-      style: {
-        width: containerRef.current.offsetWidth + "px",
-        height: containerRef.current.offsetHeight + "px",
-      },
+      style: { width: containerRef.current.offsetWidth + "px", height: containerRef.current.offsetHeight + "px" },
     })
       .then((dataUrl) => {
         const a = document.createElement("a");
@@ -718,13 +774,18 @@ function GraphInner({
       });
   }, []);
 
+  // Get current edge layout for the selected edge
+  const selectedEdgeLayout: GraphEdgeLayout | undefined = selectedEdge
+    ? layoutRef.current.edges[selectedEdge.id]
+    : undefined;
+
   const totalLevels = Math.max(...flowNodes.map((n) => n.position.y), 200);
 
   return (
     <div>
       <div className="flex justify-between items-center mb-2">
         <p className="text-[10px] text-gray-400">
-          Drag nodes to rearrange • Click color dot to customize • Arrow buttons (↑→↓←) move connection points
+          Drag nodes to rearrange • Click color dot to customize • Click an arrow to edit its connection points
         </p>
         <div className="flex gap-2">
           <button
@@ -757,6 +818,8 @@ function GraphInner({
           nodes={flowNodes}
           edges={flowEdges}
           onNodesChange={onNodesChange}
+          onEdgeClick={onEdgeClick}
+          onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.12 }}
@@ -768,6 +831,20 @@ function GraphInner({
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
+
+      {/* Edge editor popover */}
+      {selectedEdge && (
+        <EdgeEditor
+          edgeId={selectedEdge.id}
+          sourceLabel={nodeLabelMap.get(selectedEdge.sourceId) ?? selectedEdge.sourceId}
+          targetLabel={nodeLabelMap.get(selectedEdge.targetId) ?? selectedEdge.targetId}
+          currentSourceSide={selectedEdgeLayout?.sourceSide ?? "bottom"}
+          currentTargetSide={selectedEdgeLayout?.targetSide ?? "top"}
+          position={selectedEdge.position}
+          onChangeSide={handleEdgeSideChange}
+          onClose={() => setSelectedEdge(null)}
+        />
+      )}
     </div>
   );
 }

@@ -178,6 +178,12 @@ export function loadSession(id: string): LoadedSession | null {
     // Migrate older sessions to include new fields
     if (data.system) migrateSystem(data.system);
 
+    // Migrate old graphLayout format (Record<string, {x,y,color}>) → new {nodes, edges}
+    if (data.graphLayout && !data.graphLayout.nodes) {
+      // Old format: flat record of node layouts
+      data.graphLayout = { nodes: data.graphLayout, edges: {} };
+    }
+
     // Reconstruct Maps from serialized entries
     return {
       ...data,
@@ -266,6 +272,9 @@ export function importSessionFromFile(file: File): Promise<SessionMetadata | nul
 
         // Migrate older formats
         if (data.system) migrateSystem(data.system);
+        if (data.graphLayout && !data.graphLayout.nodes) {
+          data.graphLayout = { nodes: data.graphLayout, edges: {} };
+        }
 
         // Save to localStorage
         const key = SESSION_PREFIX + newId;

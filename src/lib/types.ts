@@ -214,17 +214,24 @@ export interface ReactionSystem {
 /** Handle position for edge connection points */
 export type HandleSide = "top" | "bottom" | "left" | "right";
 
-/** Persisted layout for the reaction network graph */
+/** Persisted node layout */
 export interface GraphNodeLayout {
   x: number;
   y: number;
   color?: string; // custom border/accent color (hex)
-  sourcePosition?: HandleSide; // where outgoing edges leave (default: bottom)
-  targetPosition?: HandleSide; // where incoming edges arrive (default: top)
 }
 
-/** Map of node IDs → position + color overrides */
-export type GraphLayout = Record<string, GraphNodeLayout>;
+/** Persisted edge handle overrides (which side of source/target node) */
+export interface GraphEdgeLayout {
+  sourceSide?: HandleSide;
+  targetSide?: HandleSide;
+}
+
+/** Full graph layout — node positions/colors + edge connection points */
+export interface GraphLayout {
+  nodes: Record<string, GraphNodeLayout>;
+  edges: Record<string, GraphEdgeLayout>;
+}
 
 // --- v2: System-level result types ---
 
