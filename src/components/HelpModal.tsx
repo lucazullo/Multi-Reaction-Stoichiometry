@@ -475,11 +475,9 @@ export default function HelpModal({ onClose }: HelpModalProps) {
             </ul>
             <p className="mt-3 font-semibold text-gray-800">Arrow connection points</p>
             <ul className="list-disc list-inside space-y-1 mt-1">
-              <li><strong>Click on any arrow</strong> (edge) in the graph to open a connection-point editor.</li>
-              <li>The editor shows the source and target nodes, each with four direction buttons (&#8593;&#8594;&#8595;&#8592;).</li>
-              <li>Click a direction to move that end of the arrow to the <strong>top, right, bottom, or left</strong> side of the node.</li>
-              <li>This is especially useful when multiple arrows converge on the same node &#8212; you can spread them across different sides for clarity.</li>
-              <li>Click elsewhere on the graph to close the editor.</li>
+              <li>Each node has small connection dots on all four sides (top, right, bottom, left).</li>
+              <li>To move where an arrow connects, <strong>hover over the arrow endpoint</strong> until it highlights, then <strong>drag it</strong> to a different dot on the same node.</li>
+              <li>This is especially useful when multiple arrows converge on the same node &#8212; spread them across different sides for clarity.</li>
             </ul>
             <p className="mt-3 font-semibold text-gray-800">Persistence &amp; export</p>
             <ul className="list-disc list-inside space-y-1 mt-1">

@@ -1131,7 +1131,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>ReactionIQ — v2.09a — April 2026</p>
+        <p>ReactionIQ — v2.09b — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions, suggestions, bug reports, or feature requests?{" "}
