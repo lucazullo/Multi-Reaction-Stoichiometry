@@ -32,7 +32,7 @@ export interface SessionSnapshot {
   nextNodeId: number;
   nextLinkId: number;
   savedPrices?: Array<{ value: string; unit: string }>;
-  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string }>;
+  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string; treat?: string }>;
   graphLayout?: GraphLayout;
 }
 
@@ -61,7 +61,7 @@ export interface LoadedSession {
   nextNodeId: number;
   nextLinkId: number;
   savedPrices?: Array<{ value: string; unit: string }>;
-  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string }>;
+  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string; treat?: string }>;
   graphLayout?: GraphLayout;
 }
 
@@ -330,7 +330,7 @@ export function createSnapshot(
   savedPrices?: Array<{ value: string; unit: string }>,
   existingId?: string,
   graphLayout?: GraphLayout,
-  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string }>
+  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string; treat?: string }>
 ): SessionSnapshot {
   const equations = system.nodes
     .map((n) => n.reaction.equation)

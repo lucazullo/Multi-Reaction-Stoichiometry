@@ -7,7 +7,8 @@ import FormulaText from "./FormulaText";
 import { normalizeFormula } from "@/lib/utils";
 
 export type SavedPrices = Array<{ value: string; unit: string }>;
-export type PinnedIntermediate = { formula: string; price: string; unit: string };
+export type IntermediateTreatment = "cost" | "revenue";
+export type PinnedIntermediate = { formula: string; price: string; unit: string; treat?: IntermediateTreatment };
 
 interface SystemEconomicsPanelProps {
   totals: SubstanceTotals[];
@@ -138,20 +139,20 @@ export default function SystemEconomicsPanel({
   const [pinned, setPinned] = useState<Set<string>>(() => {
     return new Set((initialPinnedIntermediates ?? []).map((p) => normalizeFormula(p.formula)));
   });
-  const [intPrices, setIntPrices] = useState<Map<string, { value: string; unit: PriceUnit }>>(() => {
-    const m = new Map<string, { value: string; unit: PriceUnit }>();
+  const [intPrices, setIntPrices] = useState<Map<string, { value: string; unit: PriceUnit; treat: IntermediateTreatment }>>(() => {
+    const m = new Map<string, { value: string; unit: PriceUnit; treat: IntermediateTreatment }>();
     for (const p of initialPinnedIntermediates ?? []) {
-      m.set(normalizeFormula(p.formula), { value: p.price, unit: p.unit as PriceUnit });
+      m.set(normalizeFormula(p.formula), { value: p.price, unit: p.unit as PriceUnit, treat: p.treat ?? "cost" });
     }
     return m;
   });
 
   // Propagate pinned intermediate changes to parent
-  const syncPinned = (nextPinned: Set<string>, nextIntPrices: Map<string, { value: string; unit: PriceUnit }>) => {
+  const syncPinned = (nextPinned: Set<string>, nextIntPrices: Map<string, { value: string; unit: PriceUnit; treat: IntermediateTreatment }>) => {
     const arr: PinnedIntermediate[] = [];
     for (const formula of nextPinned) {
-      const p = nextIntPrices.get(formula) ?? { value: "", unit: "kg" as PriceUnit };
-      arr.push({ formula, price: p.value, unit: p.unit });
+      const p = nextIntPrices.get(formula) ?? { value: "", unit: "kg" as PriceUnit, treat: "cost" as IntermediateTreatment };
+      arr.push({ formula, price: p.value, unit: p.unit, treat: p.treat });
     }
     onPinnedIntermediatesChange?.(arr);
   };
@@ -193,7 +194,7 @@ export default function SystemEconomicsPanel({
       if (!intPrices.has(key)) {
         const t = intermediateItems.find((t) => normalizeFormula(t.formula) === key);
         const newPrices = new Map(intPrices);
-        newPrices.set(key, { value: "", unit: t ? defaultUnit(t) : "kg" });
+        newPrices.set(key, { value: "", unit: t ? defaultUnit(t) : "kg", treat: "cost" });
         setIntPrices(newPrices);
         setPinned(next);
         syncPinned(next, newPrices);
@@ -216,6 +217,14 @@ export default function SystemEconomicsPanel({
     const key = normalizeFormula(formula);
     const next = new Map(intPrices);
     next.set(key, { ...next.get(key)!, unit });
+    setIntPrices(next);
+    syncPinned(pinned, next);
+  };
+
+  const handleIntTreatChange = (formula: string, treat: IntermediateTreatment) => {
+    const key = normalizeFormula(formula);
+    const next = new Map(intPrices);
+    next.set(key, { ...next.get(key)!, treat });
     setIntPrices(next);
     syncPinned(pinned, next);
   };
@@ -262,6 +271,8 @@ export default function SystemEconomicsPanel({
     });
 
     // Pinned intermediates
+    let intermediateCost = 0;
+    let intermediateRevenue = 0;
     for (const t of intermediateItems) {
       const key = normalizeFormula(t.formula);
       if (!pinned.has(key)) continue;
@@ -272,6 +283,12 @@ export default function SystemEconomicsPanel({
       const hasPrice = !isNaN(parsed) && parsed > 0;
       const quantity = hasPrice ? getThroughputForUnit(t, p.unit) : 0;
       const totalValue = hasPrice ? parsed * quantity : 0;
+      const treat = p.treat ?? "cost";
+      if (treat === "cost") {
+        intermediateCost += totalValue;
+      } else {
+        intermediateRevenue += totalValue;
+      }
       intermediateValue += totalValue;
 
       const throughputGrams = t.produced * t.molarMass;
@@ -298,7 +315,13 @@ export default function SystemEconomicsPanel({
       });
     }
 
-    onCalculate({ perSubstance, feedstockCost, productValue, intermediateValue, delta: productValue - feedstockCost });
+    onCalculate({
+      perSubstance,
+      feedstockCost,
+      productValue,
+      intermediateValue,
+      delta: (productValue + intermediateRevenue) - (feedstockCost + intermediateCost),
+    });
   };
 
   return (
@@ -352,7 +375,7 @@ export default function SystemEconomicsPanel({
           {intermediateItems.map((t) => {
             const key = normalizeFormula(t.formula);
             const isPinned = pinned.has(key);
-            const p = intPrices.get(key) ?? { value: "", unit: "kg" as PriceUnit };
+            const p = intPrices.get(key) ?? { value: "", unit: "kg" as PriceUnit, treat: "cost" as IntermediateTreatment };
             const methane = isMethane(t.formula);
             const throughputKg = (t.produced * t.molarMass) / 1000;
             return (
@@ -373,7 +396,19 @@ export default function SystemEconomicsPanel({
                   </span>
                 </div>
                 {isPinned && (
-                  <div className="flex items-center gap-1 ml-6">
+                  <div className="flex items-center gap-1.5 ml-6 flex-wrap">
+                    <select
+                      value={p.treat}
+                      onChange={(e) => handleIntTreatChange(t.formula, e.target.value as IntermediateTreatment)}
+                      className={`rounded-lg border px-2 py-1.5 text-xs font-medium focus:outline-none focus:ring-1 ${
+                        p.treat === "cost"
+                          ? "border-blue-300 bg-blue-50 text-blue-700 focus:border-blue-500 focus:ring-blue-500"
+                          : "border-green-300 bg-green-50 text-green-700 focus:border-green-500 focus:ring-green-500"
+                      }`}
+                    >
+                      <option value="cost">Cost</option>
+                      <option value="revenue">Revenue</option>
+                    </select>
                     <span className="text-sm text-gray-500">$</span>
                     <input
                       type="number"

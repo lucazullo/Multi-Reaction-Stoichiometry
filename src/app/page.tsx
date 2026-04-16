@@ -42,7 +42,7 @@ import BalanceCheckDisplay from "@/components/BalanceCheckDisplay";
 import SystemEquationSummary from "@/components/SystemEquationSummary";
 import ResultsTable from "@/components/ResultsTable";
 import ThermodynamicsDisplay from "@/components/ThermodynamicsDisplay";
-import SystemEconomicsPanel from "@/components/SystemEconomicsPanel";
+import SystemEconomicsPanel, { type PinnedIntermediate } from "@/components/SystemEconomicsPanel";
 import ReactionNetworkGraph from "@/components/ReactionNetworkGraph";
 import ValidationWarnings from "@/components/ValidationWarnings";
 import { validateSystem } from "@/lib/topology-validator";
@@ -103,7 +103,7 @@ export default function Home() {
   // Session tracking
   const [currentSessionName, setCurrentSessionName] = useState<string | null>(null);
   const [savedPrices, setSavedPrices] = useState<Array<{ value: string; unit: string }>>([]);
-  const [pinnedIntermediates, setPinnedIntermediates] = useState<Array<{ formula: string; price: string; unit: string }>>([]);
+  const [pinnedIntermediates, setPinnedIntermediates] = useState<PinnedIntermediate[]>([]);
 
   // Active tab
   const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics" | "properties" | "kinetics" | "equilibrium" | "selectivity">("per-reaction");
@@ -376,7 +376,7 @@ export default function Home() {
     setStartReactionId(snapshot.startReactionId);
     setStartInput(snapshot.startInput);
     setSavedPrices(snapshot.savedPrices ?? []);
-    setPinnedIntermediates(snapshot.pinnedIntermediates ?? []);
+    setPinnedIntermediates((snapshot.pinnedIntermediates ?? []) as PinnedIntermediate[]);
     setGraphLayout(snapshot.graphLayout ?? { nodes: {}, edges: {} });
     setError(null);
     setActiveTab(snapshot.systemResult ? "per-reaction" : "per-reaction");
@@ -1138,7 +1138,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>ReactionIQ — v2.11a — April 2026</p>
+        <p>ReactionIQ — v2.11b — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions, suggestions, bug reports, or feature requests?{" "}
