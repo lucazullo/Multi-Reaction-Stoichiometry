@@ -6,6 +6,7 @@ import type {
   BalancedReaction,
   CalculationInput,
   EnergyUnit,
+  GraphLayout,
   ParseReactionResponse,
   ReactionNode,
   ReactionSystem,
@@ -95,6 +96,9 @@ export default function Home() {
   const [energyUnit, setEnergyUnit] = useState<EnergyUnit>("kJ");
   const [startReactionId, setStartReactionId] = useState<string | null>(null);
   const [startInput, setStartInput] = useState<CalculationInput | null>(null);
+
+  // Graph layout (persisted positions + colors)
+  const [graphLayout, setGraphLayout] = useState<GraphLayout>({});
 
   // Session tracking
   const [currentSessionName, setCurrentSessionName] = useState<string | null>(null);
@@ -309,6 +313,7 @@ export default function Home() {
     setError(null);
     setCurrentSessionName(null);
     setSavedPrices([]);
+    setGraphLayout({});
     nextNodeId = 0;
     nextLinkId = 0;
   };
@@ -327,7 +332,9 @@ export default function Home() {
       startInput,
       nextNodeId,
       nextLinkId,
-      savedPrices
+      savedPrices,
+      undefined, // existingId
+      graphLayout
     );
     saveSession(snapshot);
   };
@@ -344,7 +351,9 @@ export default function Home() {
       startInput,
       nextNodeId,
       nextLinkId,
-      savedPrices
+      savedPrices,
+      undefined, // existingId
+      graphLayout
     );
     saveSession(snapshot);
     // Export immediately after saving
@@ -363,6 +372,7 @@ export default function Home() {
     setStartReactionId(snapshot.startReactionId);
     setStartInput(snapshot.startInput);
     setSavedPrices(snapshot.savedPrices ?? []);
+    setGraphLayout(snapshot.graphLayout ?? {});
     setError(null);
     setActiveTab(snapshot.systemResult ? "per-reaction" : "per-reaction");
     nextNodeId = snapshot.nextNodeId;
@@ -559,7 +569,7 @@ export default function Home() {
               Reaction Network
             </summary>
             <div className="p-4">
-              <ReactionNetworkGraph system={system} />
+              <ReactionNetworkGraph system={system} graphLayout={graphLayout} onLayoutChange={setGraphLayout} />
             </div>
           </details>
         )}
@@ -1121,7 +1131,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>ReactionIQ — v2.07a — April 2026</p>
+        <p>ReactionIQ — v2.08 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions or suggestions?{" "}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useEffect, useCallback } from "react";
+import { useMemo, useRef, useEffect, useCallback, useState } from "react";
 import { toPng } from "html-to-image";
 import {
   ReactFlow,
@@ -8,59 +8,228 @@ import {
   Controls,
   useReactFlow,
   ReactFlowProvider,
+  applyNodeChanges,
   type Node,
   type Edge,
   type NodeTypes,
+  type NodeChange,
   Handle,
   Position,
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import type { ReactionSystem } from "@/lib/types";
+import type { ReactionSystem, GraphLayout } from "@/lib/types";
 import { normalizeFormula } from "@/lib/utils";
+
+// --- Color Palette ---
+const NODE_COLORS = {
+  reaction: [
+    { label: "Teal", value: "#14b8a6", border: "border-teal-500", bg: "bg-white", text: "text-teal-700" },
+    { label: "Blue", value: "#3b82f6", border: "border-blue-500", bg: "bg-white", text: "text-blue-700" },
+    { label: "Purple", value: "#8b5cf6", border: "border-purple-500", bg: "bg-white", text: "text-purple-700" },
+    { label: "Orange", value: "#f97316", border: "border-orange-500", bg: "bg-white", text: "text-orange-700" },
+    { label: "Rose", value: "#f43f5e", border: "border-rose-500", bg: "bg-white", text: "text-rose-700" },
+    { label: "Amber", value: "#f59e0b", border: "border-amber-500", bg: "bg-white", text: "text-amber-700" },
+    { label: "Emerald", value: "#10b981", border: "border-emerald-500", bg: "bg-white", text: "text-emerald-700" },
+    { label: "Slate", value: "#64748b", border: "border-slate-500", bg: "bg-white", text: "text-slate-700" },
+  ],
+  feedstock: [
+    { label: "Blue", value: "#3b82f6" },
+    { label: "Cyan", value: "#06b6d4" },
+    { label: "Indigo", value: "#6366f1" },
+    { label: "Slate", value: "#64748b" },
+  ],
+  product: [
+    { label: "Green", value: "#22c55e" },
+    { label: "Lime", value: "#84cc16" },
+    { label: "Emerald", value: "#10b981" },
+    { label: "Amber", value: "#f59e0b" },
+  ],
+};
 
 interface ReactionNetworkGraphProps {
   system: ReactionSystem;
+  graphLayout?: GraphLayout;
+  onLayoutChange?: (layout: GraphLayout) => void;
+}
+
+// --- Color Picker Popover ---
+function ColorPicker({
+  colors,
+  currentColor,
+  onSelect,
+  onClose,
+}: {
+  colors: { label: string; value: string }[];
+  currentColor?: string;
+  onSelect: (color: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="absolute z-50 top-full left-0 mt-1 flex gap-1.5 rounded-lg border border-gray-200 bg-white p-2 shadow-lg"
+      onMouseDown={(e) => e.stopPropagation()} // prevent ReactFlow drag
+    >
+      {colors.map((c) => (
+        <button
+          key={c.value}
+          title={c.label}
+          onClick={(e) => { e.stopPropagation(); onSelect(c.value); onClose(); }}
+          className="h-5 w-5 rounded-full border-2 transition-transform hover:scale-125"
+          style={{
+            backgroundColor: c.value,
+            borderColor: currentColor === c.value ? "#1e293b" : c.value,
+            boxShadow: currentColor === c.value ? "0 0 0 2px #e2e8f0" : "none",
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 // --- Custom Nodes ---
 
-// Reaction: rectangle (teal border)
-function ReactionNodeComponent({ data }: { data: { label: string; equation: string; index: number; displayName?: string } }) {
+function ReactionNodeComponent({
+  id,
+  data,
+}: {
+  id: string;
+  data: {
+    label: string;
+    equation: string;
+    index: number;
+    displayName?: string;
+    color?: string;
+    onColorChange?: (nodeId: string, color: string) => void;
+  };
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const color = data.color || "#14b8a6";
   const title = data.displayName
     ? `Reaction ${data.index + 1} — ${data.displayName}`
     : `Reaction ${data.index + 1}`;
-  return (
-    <div className="rounded-lg border-2 border-teal-500 bg-white px-4 py-3 shadow-md min-w-[180px] max-w-[280px]">
-      <Handle type="target" position={Position.Top} className="!bg-teal-500 !w-3 !h-3" />
-      <div className="text-xs font-semibold text-teal-700 mb-1">{title}</div>
-      <div className="text-xs font-mono text-gray-700 leading-snug break-words">{data.equation}</div>
-      <Handle type="source" position={Position.Bottom} className="!bg-teal-500 !w-3 !h-3" />
-    </div>
-  );
-}
 
-// Feedstock: blue oval
-function FeedstockNodeComponent({ data }: { data: { formula: string; name: string } }) {
   return (
-    <div className="flex items-center justify-center rounded-full border-2 border-blue-500 bg-blue-50 px-5 py-2.5 shadow-sm min-w-[90px]">
-      <div className="text-center">
-        <div className="text-xs font-bold text-blue-700">{data.formula}</div>
-        <div className="text-[9px] text-blue-500">{data.name}</div>
+    <div
+      className="relative rounded-lg border-2 bg-white px-4 py-3 shadow-md min-w-[180px] max-w-[280px]"
+      style={{ borderColor: color }}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: color, width: 12, height: 12 }} />
+      <div className="flex items-center gap-1.5 mb-1">
+        <div className="relative">
+          <button
+            title="Change color"
+            onClick={(e) => { e.stopPropagation(); setShowPicker(!showPicker); }}
+            className="h-3 w-3 rounded-full border border-gray-300 flex-shrink-0 hover:scale-125 transition-transform"
+            style={{ backgroundColor: color }}
+            onMouseDown={(e) => e.stopPropagation()}
+          />
+          {showPicker && (
+            <ColorPicker
+              colors={NODE_COLORS.reaction}
+              currentColor={color}
+              onSelect={(c) => data.onColorChange?.(id, c)}
+              onClose={() => setShowPicker(false)}
+            />
+          )}
+        </div>
+        <div className="text-xs font-semibold" style={{ color }}>{title}</div>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-blue-500 !w-2.5 !h-2.5" />
+      <div className="text-xs font-mono text-gray-700 leading-snug break-words">{data.equation}</div>
+      <Handle type="source" position={Position.Bottom} style={{ background: color, width: 12, height: 12 }} />
     </div>
   );
 }
 
-// Product: green oval
-function ProductNodeComponent({ data }: { data: { formula: string; name: string } }) {
+function FeedstockNodeComponent({
+  id,
+  data,
+}: {
+  id: string;
+  data: {
+    formula: string;
+    name: string;
+    color?: string;
+    onColorChange?: (nodeId: string, color: string) => void;
+  };
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const color = data.color || "#3b82f6";
   return (
-    <div className="flex items-center justify-center rounded-full border-2 border-green-500 bg-green-50 px-5 py-2.5 shadow-sm min-w-[90px]">
-      <Handle type="target" position={Position.Top} className="!bg-green-500 !w-2.5 !h-2.5" />
+    <div
+      className="relative flex items-center justify-center rounded-full border-2 bg-blue-50 px-5 py-2.5 shadow-sm min-w-[90px]"
+      style={{ borderColor: color, backgroundColor: `${color}10` }}
+    >
       <div className="text-center">
-        <div className="text-xs font-bold text-green-700">{data.formula}</div>
-        <div className="text-[9px] text-green-500">{data.name}</div>
+        <div className="flex items-center justify-center gap-1">
+          <div className="relative">
+            <button
+              title="Change color"
+              onClick={(e) => { e.stopPropagation(); setShowPicker(!showPicker); }}
+              className="h-2.5 w-2.5 rounded-full border border-gray-300 flex-shrink-0 hover:scale-125 transition-transform"
+              style={{ backgroundColor: color }}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            {showPicker && (
+              <ColorPicker
+                colors={NODE_COLORS.feedstock}
+                currentColor={color}
+                onSelect={(c) => data.onColorChange?.(id, c)}
+                onClose={() => setShowPicker(false)}
+              />
+            )}
+          </div>
+          <div className="text-xs font-bold" style={{ color }}>{data.formula}</div>
+        </div>
+        <div className="text-[9px]" style={{ color, opacity: 0.7 }}>{data.name}</div>
+      </div>
+      <Handle type="source" position={Position.Bottom} style={{ background: color, width: 10, height: 10 }} />
+    </div>
+  );
+}
+
+function ProductNodeComponent({
+  id,
+  data,
+}: {
+  id: string;
+  data: {
+    formula: string;
+    name: string;
+    color?: string;
+    onColorChange?: (nodeId: string, color: string) => void;
+  };
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const color = data.color || "#22c55e";
+  return (
+    <div
+      className="relative flex items-center justify-center rounded-full border-2 bg-green-50 px-5 py-2.5 shadow-sm min-w-[90px]"
+      style={{ borderColor: color, backgroundColor: `${color}10` }}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: color, width: 10, height: 10 }} />
+      <div className="text-center">
+        <div className="flex items-center justify-center gap-1">
+          <div className="relative">
+            <button
+              title="Change color"
+              onClick={(e) => { e.stopPropagation(); setShowPicker(!showPicker); }}
+              className="h-2.5 w-2.5 rounded-full border border-gray-300 flex-shrink-0 hover:scale-125 transition-transform"
+              style={{ backgroundColor: color }}
+              onMouseDown={(e) => e.stopPropagation()}
+            />
+            {showPicker && (
+              <ColorPicker
+                colors={NODE_COLORS.product}
+                currentColor={color}
+                onSelect={(c) => data.onColorChange?.(id, c)}
+                onClose={() => setShowPicker(false)}
+              />
+            )}
+          </div>
+          <div className="text-xs font-bold" style={{ color }}>{data.formula}</div>
+        </div>
+        <div className="text-[9px]" style={{ color, opacity: 0.7 }}>{data.name}</div>
       </div>
     </div>
   );
@@ -72,7 +241,11 @@ const nodeTypes: NodeTypes = {
   product: ProductNodeComponent,
 };
 
-function buildGraph(system: ReactionSystem) {
+function buildGraph(
+  system: ReactionSystem,
+  savedLayout: GraphLayout | undefined,
+  onColorChange: (nodeId: string, color: string) => void
+) {
   const { nodes, links } = system;
 
   // Build link lookup
@@ -125,25 +298,35 @@ function buildGraph(system: ReactionSystem) {
   const maxLevel = Math.max(...levels.values(), 0);
   const centerX = 400;
 
+  // Helper: use saved position if available, otherwise compute default
+  const pos = (nodeId: string, defaultX: number, defaultY: number) => {
+    const saved = savedLayout?.[nodeId];
+    return saved ? { x: saved.x, y: saved.y } : { x: defaultX, y: defaultY };
+  };
+
+  const colorOf = (nodeId: string) => savedLayout?.[nodeId]?.color;
+
   // --- Reaction nodes ---
   const graphNodes: Node[] = nodes.map((node) => {
     const level = levels.get(node.id) ?? 0;
     const group = levelGroups.get(level) ?? [node.id];
     const indexInGroup = group.indexOf(node.id);
     const groupWidth = (group.length - 1) * xSpacing;
+    const defaultX = indexInGroup * xSpacing - groupWidth / 2 + centerX;
+    const defaultY = level * ySpacing + 150;
 
     return {
       id: node.id,
       type: "reaction",
-      position: {
-        x: indexInGroup * xSpacing - groupWidth / 2 + centerX,
-        y: level * ySpacing + 150,
-      },
+      position: pos(node.id, defaultX, defaultY),
+      draggable: true,
       data: {
         label: node.label.slice(0, 50),
         equation: node.reaction.equation,
         index: nodes.indexOf(node),
         displayName: node.displayName,
+        color: colorOf(node.id),
+        onColorChange,
       },
     };
   });
@@ -170,7 +353,6 @@ function buildGraph(system: ReactionSystem) {
   });
 
   // --- Deduplicated feedstock nodes (blue ovals, top) ---
-  // Group unlinked reactants by normalized formula → single node per unique feedstock
   const feedstockMap = new Map<string, { formula: string; name: string; targetReactions: string[] }>();
   for (const node of nodes) {
     for (let ri = 0; ri < node.reaction.reactants.length; ri++) {
@@ -196,22 +378,22 @@ function buildGraph(system: ReactionSystem) {
   const feedstockWidth = (feedstocks.length - 1) * 160;
   feedstocks.forEach(([key, fs], i) => {
     const nodeId = `feedstock-${key}`;
+    const defaultX = i * 160 - feedstockWidth / 2 + centerX;
     graphNodes.push({
       id: nodeId,
       type: "feedstock",
-      position: {
-        x: i * 160 - feedstockWidth / 2 + centerX,
-        y: 0,
-      },
-      data: { formula: fs.formula, name: fs.name },
+      position: pos(nodeId, defaultX, 0),
+      draggable: true,
+      data: { formula: fs.formula, name: fs.name, color: colorOf(nodeId), onColorChange },
     });
     for (const targetId of fs.targetReactions) {
+      const edgeColor = colorOf(nodeId) || "#3b82f6";
       graphEdges.push({
         id: `edge-fs-${key}-${targetId}`,
         source: nodeId,
         target: targetId,
-        style: { stroke: "#3b82f6", strokeWidth: 1.5, strokeDasharray: "6 3" },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#3b82f6" },
+        style: { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: "6 3" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
       });
     }
   });
@@ -243,22 +425,22 @@ function buildGraph(system: ReactionSystem) {
   const productY = (maxLevel + 1) * ySpacing + 150;
   products.forEach(([key, pr], i) => {
     const nodeId = `product-${key}`;
+    const defaultX = i * 160 - productWidth / 2 + centerX;
     graphNodes.push({
       id: nodeId,
       type: "product",
-      position: {
-        x: i * 160 - productWidth / 2 + centerX,
-        y: productY,
-      },
-      data: { formula: pr.formula, name: pr.name },
+      position: pos(nodeId, defaultX, productY),
+      draggable: true,
+      data: { formula: pr.formula, name: pr.name, color: colorOf(nodeId), onColorChange },
     });
     for (const sourceId of pr.sourceReactions) {
+      const edgeColor = colorOf(nodeId) || "#22c55e";
       graphEdges.push({
         id: `edge-pr-${key}-${sourceId}`,
         source: sourceId,
         target: nodeId,
-        style: { stroke: "#22c55e", strokeWidth: 1.5, strokeDasharray: "6 3" },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#22c55e" },
+        style: { stroke: edgeColor, strokeWidth: 1.5, strokeDasharray: "6 3" },
+        markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
       });
     }
   });
@@ -267,10 +449,80 @@ function buildGraph(system: ReactionSystem) {
 }
 
 /** Inner component with useReactFlow access */
-function GraphInner({ system }: { system: ReactionSystem }) {
+function GraphInner({
+  system,
+  graphLayout,
+  onLayoutChange,
+}: {
+  system: ReactionSystem;
+  graphLayout?: GraphLayout;
+  onLayoutChange?: (layout: GraphLayout) => void;
+}) {
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
-  const { graphNodes, graphEdges } = useMemo(() => buildGraph(system), [system]);
+  const layoutRef = useRef<GraphLayout>(graphLayout ?? {});
+
+  // Color change handler — update layout immediately
+  const handleColorChange = useCallback(
+    (nodeId: string, color: string) => {
+      const prev = layoutRef.current;
+      const existing = prev[nodeId] ?? { x: 0, y: 0 };
+      const updated = { ...prev, [nodeId]: { ...existing, color } };
+      layoutRef.current = updated;
+      onLayoutChange?.(updated);
+      // Force re-render by setting nodes
+      setFlowNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, color } } : n
+        )
+      );
+    },
+    [onLayoutChange]
+  );
+
+  const { graphNodes, graphEdges } = useMemo(
+    () => buildGraph(system, graphLayout, handleColorChange),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [system, graphLayout]
+  );
+
+  const [flowNodes, setFlowNodes] = useState<Node[]>(graphNodes);
+  const [flowEdges] = useState<Edge[]>(graphEdges);
+
+  // Sync when system or layout changes
+  useEffect(() => {
+    setFlowNodes(graphNodes);
+  }, [graphNodes]);
+
+  // Handle node dragging
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setFlowNodes((nds) => {
+        const updated = applyNodeChanges(changes, nds);
+
+        // Persist positions on drag end
+        const hasDragEnd = changes.some(
+          (c) => c.type === "position" && c.dragging === false
+        );
+        if (hasDragEnd) {
+          const newLayout = { ...layoutRef.current };
+          for (const node of updated) {
+            const existing = newLayout[node.id];
+            newLayout[node.id] = {
+              x: node.position.x,
+              y: node.position.y,
+              color: existing?.color,
+            };
+          }
+          layoutRef.current = newLayout;
+          onLayoutChange?.(newLayout);
+        }
+
+        return updated;
+      });
+    },
+    [onLayoutChange]
+  );
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -289,10 +541,17 @@ function GraphInner({ system }: { system: ReactionSystem }) {
     setTimeout(() => fitView({ padding: 0.12, duration: 200 }), 250);
   }, [graphNodes.length, graphEdges.length, fitView]);
 
+  // Reset layout to auto-computed positions
+  const handleResetLayout = useCallback(() => {
+    layoutRef.current = {};
+    onLayoutChange?.({});
+    const { graphNodes: fresh } = buildGraph(system, undefined, handleColorChange);
+    setFlowNodes(fresh);
+    setTimeout(() => fitView({ padding: 0.12, duration: 300 }), 50);
+  }, [system, onLayoutChange, fitView, handleColorChange]);
+
   const handleDownloadPNG = useCallback(() => {
     if (!containerRef.current) return;
-
-    // Find the React Flow viewport element which contains the visual graph
     const viewport = containerRef.current.querySelector(
       ".react-flow__viewport"
     ) as HTMLElement | null;
@@ -302,7 +561,6 @@ function GraphInner({ system }: { system: ReactionSystem }) {
       backgroundColor: "#ffffff",
       pixelRatio: 2,
       style: {
-        // Ensure the viewport renders at its full extent
         width: containerRef.current.offsetWidth + "px",
         height: containerRef.current.offsetHeight + "px",
       },
@@ -316,11 +574,7 @@ function GraphInner({ system }: { system: ReactionSystem }) {
         document.body.removeChild(a);
       })
       .catch(() => {
-        // Fallback: capture the entire container
-        toPng(containerRef.current!, {
-          backgroundColor: "#ffffff",
-          pixelRatio: 2,
-        })
+        toPng(containerRef.current!, { backgroundColor: "#ffffff", pixelRatio: 2 })
           .then((dataUrl) => {
             const a = document.createElement("a");
             a.href = dataUrl;
@@ -329,26 +583,37 @@ function GraphInner({ system }: { system: ReactionSystem }) {
             a.click();
             document.body.removeChild(a);
           })
-          .catch(() => {
-            alert("Could not export graph as PNG.");
-          });
+          .catch(() => alert("Could not export graph as PNG."));
       });
   }, []);
 
-  const totalLevels = Math.max(...graphNodes.map((n) => n.position.y), 200);
+  const totalLevels = Math.max(...flowNodes.map((n) => n.position.y), 200);
 
   return (
     <div>
-      <div className="flex justify-end mb-2">
-        <button
-          onClick={handleDownloadPNG}
-          className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
-        >
-          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
-          Download PNG
-        </button>
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-[10px] text-gray-400">Drag nodes to rearrange • Click color dot to customize</p>
+        <div className="flex gap-2">
+          <button
+            onClick={handleResetLayout}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+            title="Reset to automatic layout"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+            </svg>
+            Reset Layout
+          </button>
+          <button
+            onClick={handleDownloadPNG}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Download PNG
+          </button>
+        </div>
       </div>
       <div
         ref={containerRef}
@@ -356,8 +621,9 @@ function GraphInner({ system }: { system: ReactionSystem }) {
         style={{ height: Math.max(totalLevels + 150, 450) }}
       >
         <ReactFlow
-          nodes={graphNodes}
-          edges={graphEdges}
+          nodes={flowNodes}
+          edges={flowEdges}
+          onNodesChange={onNodesChange}
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.12 }}
@@ -373,10 +639,14 @@ function GraphInner({ system }: { system: ReactionSystem }) {
   );
 }
 
-export default function ReactionNetworkGraph({ system }: ReactionNetworkGraphProps) {
+export default function ReactionNetworkGraph({
+  system,
+  graphLayout,
+  onLayoutChange,
+}: ReactionNetworkGraphProps) {
   return (
     <ReactFlowProvider>
-      <GraphInner system={system} />
+      <GraphInner system={system} graphLayout={graphLayout} onLayoutChange={onLayoutChange} />
     </ReactFlowProvider>
   );
 }

@@ -1,6 +1,7 @@
 import type {
   CalculationInput,
   EnergyUnit,
+  GraphLayout,
   ReactionSystem,
   SystemCalculationResult,
   SystemEconomics,
@@ -31,6 +32,7 @@ export interface SessionSnapshot {
   nextNodeId: number;
   nextLinkId: number;
   savedPrices?: Array<{ value: string; unit: string }>;
+  graphLayout?: GraphLayout;
 }
 
 // Serialized versions with Map → entries array
@@ -58,6 +60,7 @@ export interface LoadedSession {
   nextNodeId: number;
   nextLinkId: number;
   savedPrices?: Array<{ value: string; unit: string }>;
+  graphLayout?: GraphLayout;
 }
 
 // --- Keys ---
@@ -297,7 +300,8 @@ export function createSnapshot(
   nextNodeId: number,
   nextLinkId: number,
   savedPrices?: Array<{ value: string; unit: string }>,
-  existingId?: string
+  existingId?: string,
+  graphLayout?: GraphLayout
 ): SessionSnapshot {
   const equations = system.nodes
     .map((n) => n.reaction.equation)
@@ -327,5 +331,6 @@ export function createSnapshot(
     nextNodeId,
     nextLinkId,
     savedPrices,
+    graphLayout,
   };
 }

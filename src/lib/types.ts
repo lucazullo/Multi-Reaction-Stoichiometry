@@ -211,6 +211,16 @@ export interface ReactionSystem {
   competingSets?: CompetingReactionSet[];
 }
 
+/** Persisted layout for the reaction network graph */
+export interface GraphNodeLayout {
+  x: number;
+  y: number;
+  color?: string; // custom border/accent color (hex)
+}
+
+/** Map of node IDs → position + color overrides */
+export type GraphLayout = Record<string, GraphNodeLayout>;
+
 // --- v2: System-level result types ---
 
 export interface SystemKineticsResult {
