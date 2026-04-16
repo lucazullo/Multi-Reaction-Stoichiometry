@@ -170,11 +170,11 @@ export function generateTotalsCSV(totals: SubstanceTotals[]): string {
 
 export function generateSystemEconCSV(econ: SystemEconomics): string {
   const rows: string[] = [];
-  rows.push(["Substance", "Formula", "Role", "Net Quantity (kg)", "Price/Unit", "Unit", "Total Cost/Price ($)"].map(esc).join(","));
+  rows.push(["Substance", "Formula", "Role", "Quantity (kg)", "Quantity (lb)", "Quantity (tonne)", "Quantity (short ton)", "Price/Unit", "Unit", "Total Cost/Price ($)"].map(esc).join(","));
   for (const e of econ.perSubstance) {
     rows.push([
       e.name, plainFormula(e.formula), e.role,
-      fmt(e.quantityKg),
+      fmt(e.quantityKg), fmt(e.quantityLb), fmt(e.quantityTonnes), fmt(e.quantityTons),
       e.pricePerUnit !== null ? fmt(e.pricePerUnit) : "",
       e.pricePerUnit !== null ? `$/${e.priceUnit}` : "",
       fmt(e.totalValue),

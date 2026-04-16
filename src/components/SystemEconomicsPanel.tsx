@@ -239,6 +239,7 @@ export default function SystemEconomicsPanel({
         productValue += totalValue;
       }
 
+      const methane = isMethane(t.formula);
       return {
         formula: t.formula,
         name: t.name,
@@ -247,6 +248,13 @@ export default function SystemEconomicsPanel({
         quantityGrams: t.totalGrams,
         quantityKg: t.totalKilograms,
         quantityLb: t.totalPounds,
+        quantityTons: t.totalTons,
+        quantityTonnes: t.totalTonnes,
+        quantityLiters: t.totalLiters,
+        quantityGallons: t.totalGallons,
+        quantityMMBTU: methane ? t.totalKilograms / METHANE_KG_PER_MMBTU : null,
+        isLiquid: t.isLiquid,
+        isMethane: methane,
         pricePerUnit: hasPrice ? parsed : null,
         priceUnit: prices[i].unit as string as AmountUnit,
         totalValue,
@@ -267,14 +275,23 @@ export default function SystemEconomicsPanel({
       intermediateValue += totalValue;
 
       const throughputGrams = t.produced * t.molarMass;
+      const throughputKg = throughputGrams / 1000;
+      const methane = isMethane(t.formula);
       perSubstance.push({
         formula: t.formula,
         name: t.name,
         role: "intermediate",
         quantity: t.produced,
         quantityGrams: throughputGrams,
-        quantityKg: throughputGrams / 1000,
+        quantityKg: throughputKg,
         quantityLb: throughputGrams / 453.592,
+        quantityTons: throughputGrams / 907185,
+        quantityTonnes: throughputGrams / 1000000,
+        quantityLiters: t.isLiquid ? throughputKg : null,
+        quantityGallons: t.isLiquid ? throughputKg / 3.78541 : null,
+        quantityMMBTU: methane ? throughputKg / METHANE_KG_PER_MMBTU : null,
+        isLiquid: t.isLiquid,
+        isMethane: methane,
         pricePerUnit: hasPrice ? parsed : null,
         priceUnit: p.unit as string as AmountUnit,
         totalValue,

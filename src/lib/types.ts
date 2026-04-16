@@ -321,6 +321,13 @@ export interface SystemEconLine {
   quantityGrams: number;
   quantityKg: number;
   quantityLb: number;
+  quantityTons: number;    // short tons (US)
+  quantityTonnes: number;  // metric tonnes
+  quantityLiters: number | null;
+  quantityGallons: number | null;
+  quantityMMBTU: number | null; // only for methane
+  isLiquid: boolean;
+  isMethane: boolean;
   pricePerUnit: number | null;
   priceUnit: AmountUnit;
   totalValue: number;      // price × quantity in chosen unit
