@@ -183,6 +183,9 @@ export function generateSystemEconCSV(econ: SystemEconomics): string {
   rows.push("");
   rows.push(`Total Feedstock Cost ($),${fmt(econ.feedstockCost)}`);
   rows.push(`Total Product/Excess Value ($),${fmt(econ.productValue)}`);
+  if (econ.intermediateValue > 0) {
+    rows.push(`Internal Transfer Value ($),${fmt(econ.intermediateValue)}`);
+  }
   rows.push(`Net Delta ($),${fmt(econ.delta)}`);
   return rows.join("\n");
 }

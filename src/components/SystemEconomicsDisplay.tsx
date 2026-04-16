@@ -15,18 +15,27 @@ const ROLE_LABELS: Record<string, string> = {
   "net-reactant": "Feedstock",
   "net-product": "Product",
   excess: "Excess",
+  intermediate: "Intermediate",
 };
 
 const ROLE_STYLES: Record<string, string> = {
   "net-reactant": "bg-blue-50 text-blue-700",
   "net-product": "bg-green-50 text-green-700",
   excess: "bg-amber-50 text-amber-700",
+  intermediate: "bg-purple-50 text-purple-700",
+};
+
+const VALUE_COLORS: Record<string, string> = {
+  "net-reactant": "text-blue-700",
+  "net-product": "text-green-700",
+  excess: "text-green-700",
+  intermediate: "text-purple-700",
 };
 
 export default function SystemEconomicsDisplay({
   economics,
 }: SystemEconomicsDisplayProps) {
-  const { perSubstance, feedstockCost, productValue, delta } = economics;
+  const { perSubstance, feedstockCost, productValue, intermediateValue, delta } = economics;
 
   return (
     <div className="space-y-4">
@@ -36,7 +45,7 @@ export default function SystemEconomicsDisplay({
             <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               <th className="pb-3 pr-4">Substance</th>
               <th className="pb-3 pr-4">Role</th>
-              <th className="pb-3 pr-4">Net Quantity</th>
+              <th className="pb-3 pr-4">Quantity</th>
               <th className="pb-3 pr-4">Price/Unit</th>
               <th className="pb-3">Total Cost/Price</th>
             </tr>
@@ -55,15 +64,16 @@ export default function SystemEconomicsDisplay({
                 </td>
                 <td className="py-2 pr-4 font-mono text-sm">
                   {e.quantityKg.toPrecision(4)} kg
+                  {e.role === "intermediate" && (
+                    <span className="ml-1 text-xs text-purple-400">(throughput)</span>
+                  )}
                 </td>
                 <td className="py-2 pr-4 font-mono text-sm">
                   {e.pricePerUnit !== null
                     ? `$${e.pricePerUnit}/${e.priceUnit}`
                     : "--"}
                 </td>
-                <td className={`py-2 font-mono text-sm ${
-                  e.role === "net-reactant" ? "text-blue-700" : "text-green-700"
-                }`}>
+                <td className={`py-2 font-mono text-sm ${VALUE_COLORS[e.role] ?? "text-gray-700"}`}>
                   {e.totalValue > 0 ? fmt(e.totalValue) : "--"}
                 </td>
               </tr>
@@ -81,6 +91,12 @@ export default function SystemEconomicsDisplay({
           <span className="text-gray-600">Total Product/Excess Value:</span>
           <span className="font-mono font-medium text-green-700">{fmt(productValue)}</span>
         </div>
+        {intermediateValue > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600">Internal Transfer Value (intermediates):</span>
+            <span className="font-mono font-medium text-purple-700">{fmt(intermediateValue)}</span>
+          </div>
+        )}
         <div className="border-t border-gray-300 pt-2 flex justify-between text-sm font-semibold">
           <span className="text-gray-800">Net Delta:</span>
           <span className={`font-mono ${delta >= 0 ? "text-green-600" : "text-red-600"}`}>

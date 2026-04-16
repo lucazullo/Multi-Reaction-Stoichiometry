@@ -368,6 +368,7 @@ function aggregateSubstances(
   const nameMap = new Map<string, string>();
   const molarMassMap = new Map<string, number>();
   const liquidInfo = new Map<string, { isLiquid: boolean; density: number | null }>();
+  const densityGasMap = new Map<string, number | null>();
 
   for (const [, results] of perReaction) {
     for (const r of results) {
@@ -379,6 +380,9 @@ function aggregateSubstances(
           isLiquid: r.substance.state === "liquid" && r.substance.density !== null,
           density: r.substance.density,
         });
+      }
+      if (!densityGasMap.has(key)) {
+        densityGasMap.set(key, r.substance.densityGas ?? null);
       }
 
       if (r.substance.role === "reactant") {
@@ -441,6 +445,8 @@ function aggregateSubstances(
       isLiquid,
       produced: prod,
       consumed: cons,
+      molarMass,
+      densityGas: densityGasMap.get(formula) ?? null,
       note,
     });
   }

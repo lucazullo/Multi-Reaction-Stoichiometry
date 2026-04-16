@@ -103,6 +103,7 @@ export default function Home() {
   // Session tracking
   const [currentSessionName, setCurrentSessionName] = useState<string | null>(null);
   const [savedPrices, setSavedPrices] = useState<Array<{ value: string; unit: string }>>([]);
+  const [pinnedIntermediates, setPinnedIntermediates] = useState<Array<{ formula: string; price: string; unit: string }>>([]);
 
   // Active tab
   const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics" | "properties" | "kinetics" | "equilibrium" | "selectivity">("per-reaction");
@@ -313,6 +314,7 @@ export default function Home() {
     setError(null);
     setCurrentSessionName(null);
     setSavedPrices([]);
+    setPinnedIntermediates([]);
     setGraphLayout({ nodes: {}, edges: {} });
     nextNodeId = 0;
     nextLinkId = 0;
@@ -334,7 +336,8 @@ export default function Home() {
       nextLinkId,
       savedPrices,
       undefined, // existingId
-      graphLayout
+      graphLayout,
+      pinnedIntermediates
     );
     saveSession(snapshot);
   };
@@ -353,7 +356,8 @@ export default function Home() {
       nextLinkId,
       savedPrices,
       undefined, // existingId
-      graphLayout
+      graphLayout,
+      pinnedIntermediates
     );
     saveSession(snapshot);
     // Export immediately after saving
@@ -372,6 +376,7 @@ export default function Home() {
     setStartReactionId(snapshot.startReactionId);
     setStartInput(snapshot.startInput);
     setSavedPrices(snapshot.savedPrices ?? []);
+    setPinnedIntermediates(snapshot.pinnedIntermediates ?? []);
     setGraphLayout(snapshot.graphLayout ?? { nodes: {}, edges: {} });
     setError(null);
     setActiveTab(snapshot.systemResult ? "per-reaction" : "per-reaction");
@@ -1099,6 +1104,8 @@ export default function Home() {
                     onCalculate={handleSystemEconomics}
                     initialPrices={savedPrices.length > 0 ? savedPrices : undefined}
                     onPricesChange={setSavedPrices}
+                    initialPinnedIntermediates={pinnedIntermediates}
+                    onPinnedIntermediatesChange={setPinnedIntermediates}
                   />
                 </section>
 
@@ -1131,7 +1138,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>ReactionIQ — v2.10 — April 2026</p>
+        <p>ReactionIQ — v2.11 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions, suggestions, bug reports, or feature requests?{" "}

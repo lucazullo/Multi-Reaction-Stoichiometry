@@ -32,6 +32,7 @@ export interface SessionSnapshot {
   nextNodeId: number;
   nextLinkId: number;
   savedPrices?: Array<{ value: string; unit: string }>;
+  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string }>;
   graphLayout?: GraphLayout;
 }
 
@@ -60,6 +61,7 @@ export interface LoadedSession {
   nextNodeId: number;
   nextLinkId: number;
   savedPrices?: Array<{ value: string; unit: string }>;
+  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string }>;
   graphLayout?: GraphLayout;
 }
 
@@ -85,9 +87,18 @@ function deserializeResult(
     propertyWarnings?: SystemCalculationResult["propertyWarnings"];
   }
 ): SystemCalculationResult {
+  // Migrate older totals missing molarMass / densityGas
+  const totals = (data.totals ?? []).map((t) => {
+    const raw = t as unknown as Record<string, unknown>;
+    return {
+      ...t,
+      molarMass: (raw.molarMass as number) ?? (t.totalMoles > 0 ? t.totalGrams / t.totalMoles : 1),
+      densityGas: (raw.densityGas as number | null) ?? null,
+    };
+  });
   return {
     perReaction: new Map(data.perReaction),
-    totals: data.totals,
+    totals,
     balanceCheck: data.balanceCheck ?? {
       atoms: [],
       mass: { totalMassIn: 0, totalMassOut: 0, delta: 0, deltaPercent: 0, balanced: true },
@@ -177,6 +188,11 @@ export function loadSession(id: string): LoadedSession | null {
 
     // Migrate older sessions to include new fields
     if (data.system) migrateSystem(data.system);
+
+    // Migrate older SystemEconomics without intermediateValue
+    if (data.systemEcon && data.systemEcon.intermediateValue === undefined) {
+      data.systemEcon.intermediateValue = 0;
+    }
 
     // Migrate old graphLayout format (Record<string, {x,y,color}>) → new {nodes, edges}
     if (data.graphLayout && !data.graphLayout.nodes) {
@@ -272,6 +288,9 @@ export function importSessionFromFile(file: File): Promise<SessionMetadata | nul
 
         // Migrate older formats
         if (data.system) migrateSystem(data.system);
+        if (data.systemEcon && data.systemEcon.intermediateValue === undefined) {
+          data.systemEcon.intermediateValue = 0;
+        }
         if (data.graphLayout && !data.graphLayout.nodes) {
           data.graphLayout = { nodes: data.graphLayout, edges: {} };
         }
@@ -310,7 +329,8 @@ export function createSnapshot(
   nextLinkId: number,
   savedPrices?: Array<{ value: string; unit: string }>,
   existingId?: string,
-  graphLayout?: GraphLayout
+  graphLayout?: GraphLayout,
+  pinnedIntermediates?: Array<{ formula: string; price: string; unit: string }>
 ): SessionSnapshot {
   const equations = system.nodes
     .map((n) => n.reaction.equation)
@@ -340,6 +360,7 @@ export function createSnapshot(
     nextNodeId,
     nextLinkId,
     savedPrices,
+    pinnedIntermediates,
     graphLayout,
   };
 }

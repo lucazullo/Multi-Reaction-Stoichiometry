@@ -264,6 +264,8 @@ export interface SubstanceTotals {
   isLiquid: boolean;
   produced: number; // total moles produced across all reactions
   consumed: number; // total moles consumed across all reactions
+  molarMass: number;           // g/mol — needed for intermediate throughput pricing
+  densityGas: number | null;   // kg/m³ at STP — for gas volume calcs
   note?: string;
 }
 
@@ -307,6 +309,7 @@ export interface SystemEconomics {
   perSubstance: SystemEconLine[];
   feedstockCost: number;
   productValue: number;    // net-products + excess
+  intermediateValue: number; // pinned intermediates internal transfer value
   delta: number;           // productValue - feedstockCost
 }
 
