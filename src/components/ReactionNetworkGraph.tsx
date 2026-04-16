@@ -578,15 +578,33 @@ function GraphInner({
     if (!containerRef.current) return;
     const vp = containerRef.current.querySelector(".react-flow__viewport") as HTMLElement | null;
     const target = vp ?? containerRef.current;
-    toPng(target, {
-      backgroundColor: "#ffffff", pixelRatio: 2,
+
+    // Hide handle dots for a cleaner static image
+    const handles = containerRef.current.querySelectorAll<HTMLElement>(".react-flow__handle");
+    handles.forEach((h) => (h.style.display = "none"));
+
+    const opts = {
+      backgroundColor: "#ffffff",
+      pixelRatio: 2,
       style: { width: containerRef.current.offsetWidth + "px", height: containerRef.current.offsetHeight + "px" },
-    })
-      .then((url) => { const a = document.createElement("a"); a.href = url; a.download = "reaction-network.png"; document.body.appendChild(a); a.click(); document.body.removeChild(a); })
+    };
+
+    const restore = () => handles.forEach((h) => (h.style.display = ""));
+    const download = (url: string) => {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "reaction-network.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    toPng(target, opts)
+      .then((url) => { download(url); restore(); })
       .catch(() => {
         toPng(containerRef.current!, { backgroundColor: "#ffffff", pixelRatio: 2 })
-          .then((url) => { const a = document.createElement("a"); a.href = url; a.download = "reaction-network.png"; document.body.appendChild(a); a.click(); document.body.removeChild(a); })
-          .catch(() => alert("Could not export graph as PNG."));
+          .then((url) => { download(url); restore(); })
+          .catch(() => { restore(); alert("Could not export graph as PNG."); });
       });
   }, []);
 
