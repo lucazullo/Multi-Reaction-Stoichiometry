@@ -457,15 +457,33 @@ export default function HelpModal({ onClose }: HelpModalProps) {
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Reaction Network Graph</h3>
             <p>
               When you have two or more reactions, a collapsible <strong>Reaction Network</strong>
-              section appears showing an interactive flow diagram:
+              section appears showing a fully interactive flow diagram:
             </p>
             <ul className="list-disc list-inside space-y-1 mt-2">
               <li><strong>Blue ovals</strong> (top) — feedstocks entering the system.</li>
-              <li><strong>Teal rectangles</strong> (middle) — reactions, with equations and optional custom names.</li>
+              <li><strong>Colored rectangles</strong> (middle) — reactions, with equations and optional custom names.</li>
               <li><strong>Green ovals</strong> (bottom) — products and coproducts leaving the system.</li>
               <li><strong>Purple arrows</strong> — linked substance flows between reactions (with formula and fraction).</li>
-              <li>Nodes can be <strong>dragged</strong> to rearrange the layout. Use zoom and pan controls.</li>
-              <li><strong>Download PNG</strong> button exports the network as an image.</li>
+            </ul>
+            <p className="mt-3 font-semibold text-gray-800">Drag &amp; rearrange</p>
+            <p>All nodes can be <strong>dragged</strong> to any position. Use zoom and pan controls to navigate. Click <strong>Reset Layout</strong> to return to the automatic topological arrangement.</p>
+            <p className="mt-3 font-semibold text-gray-800">Color customization</p>
+            <ul className="list-disc list-inside space-y-1 mt-1">
+              <li>Click the small <strong>color dot</strong> on any node to open a palette of 12&#8211;18 colors.</li>
+              <li>By default, reaction nodes are colored by thermodynamics: <strong className="text-red-500">red for exothermic</strong> (&#916;H &lt; 0), <strong className="text-blue-500">blue for endothermic</strong> (&#916;H &gt; 0), and teal when &#916;H is unknown or zero.</li>
+              <li>Feedstock and product edges automatically match their node color.</li>
+            </ul>
+            <p className="mt-3 font-semibold text-gray-800">Arrow connection points</p>
+            <ul className="list-disc list-inside space-y-1 mt-1">
+              <li>Each node has small <strong>arrow buttons</strong> (&#8593;&#8594;&#8595;&#8592;) that show where edges connect.</li>
+              <li>Click an arrow button to <strong>cycle</strong> the connection point through top &#8594; right &#8594; bottom &#8594; left.</li>
+              <li>Reaction nodes have two buttons: one for incoming edges (target) and one for outgoing edges (source).</li>
+              <li>Feedstock nodes have one button (outgoing), product nodes have one button (incoming).</li>
+            </ul>
+            <p className="mt-3 font-semibold text-gray-800">Persistence &amp; export</p>
+            <ul className="list-disc list-inside space-y-1 mt-1">
+              <li>All positions, colors, and connection points are <strong>saved with your session</strong> and restored on load.</li>
+              <li><strong>Download PNG</strong> exports the network as a high-resolution image.</li>
             </ul>
           </section>
 

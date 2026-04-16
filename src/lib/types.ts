@@ -211,11 +211,16 @@ export interface ReactionSystem {
   competingSets?: CompetingReactionSet[];
 }
 
+/** Handle position for edge connection points */
+export type HandleSide = "top" | "bottom" | "left" | "right";
+
 /** Persisted layout for the reaction network graph */
 export interface GraphNodeLayout {
   x: number;
   y: number;
   color?: string; // custom border/accent color (hex)
+  sourcePosition?: HandleSide; // where outgoing edges leave (default: bottom)
+  targetPosition?: HandleSide; // where incoming edges arrive (default: top)
 }
 
 /** Map of node IDs → position + color overrides */
