@@ -1134,12 +1134,12 @@ export default function Home() {
         <p>ReactionIQ — v2.08 — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
-          Questions or suggestions?{" "}
+          Questions, suggestions, bug reports, or feature requests?{" "}
           <a
-            href="mailto:lucazullo@gmail.com"
+            href="mailto:luca.zullo@verdenero.com"
             className="text-teal-600 hover:text-teal-700 underline"
           >
-            lucazullo@gmail.com
+            luca.zullo@verdenero.com
           </a>
         </p>
       </footer>
