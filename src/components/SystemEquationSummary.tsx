@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import type { ReactionNode, SubstanceTotals } from "@/lib/types";
+import FormulaText, { unicodeFormula } from "./FormulaText";
 
 interface SystemEquationSummaryProps {
   totals: SubstanceTotals[];
@@ -37,11 +38,16 @@ function formatCoeff(n: number): string {
  * Build the overall system equation directly from the system totals.
  * Uses actual moles (which are already mass-balanced from the calculation engine)
  * and normalizes to the smallest coefficient.
+ * Returns both plain strings (for PNG export) and structured data (for JSX rendering).
  */
 function buildOverallEquation(totals: SubstanceTotals[]): {
   left: string;
   right: string;
   excessStr: string;
+  reactants: SubstanceTotals[];
+  products: SubstanceTotals[];
+  excess: SubstanceTotals[];
+  coeffMap: Map<string, number>;
 } {
   const reactants = totals.filter(
     (t) => (t.role === "net-reactant" || t.role === "deficit") && t.totalMoles > 1e-10
@@ -60,17 +66,13 @@ function buildOverallEquation(totals: SubstanceTotals[]): {
     ...excess.map((e) => ({ formula: e.formula, moles: e.totalMoles })),
   ];
 
-  if (allSubstances.length === 0) {
-    return { left: "", right: "", excessStr: "" };
-  }
-
-  // Find smallest mole value to normalize
-  const minMoles = Math.min(...allSubstances.map((s) => s.moles));
-
-  // Build coefficient map
   const coeffMap = new Map<string, number>();
-  for (const s of allSubstances) {
-    coeffMap.set(s.formula, s.moles / minMoles);
+
+  if (allSubstances.length > 0) {
+    const minMoles = Math.min(...allSubstances.map((s) => s.moles));
+    for (const s of allSubstances) {
+      coeffMap.set(s.formula, s.moles / minMoles);
+    }
   }
 
   const formatSide = (substances: SubstanceTotals[]) =>
@@ -79,7 +81,7 @@ function buildOverallEquation(totals: SubstanceTotals[]): {
       .map((s) => {
         const coeff = coeffMap.get(s.formula) ?? 1;
         const coeffStr = formatCoeff(coeff);
-        return `${coeffStr}${s.formula}`;
+        return `${coeffStr}${unicodeFormula(s.formula)}`;
       })
       .join(" + ");
 
@@ -87,7 +89,37 @@ function buildOverallEquation(totals: SubstanceTotals[]): {
     left: formatSide(reactants),
     right: formatSide(products),
     excessStr: formatSide(excess),
+    reactants,
+    products,
+    excess,
+    coeffMap,
   };
+}
+
+/** Render a list of substances as JSX with proper subscripts, joined by " + " */
+function FormulaEquationSide({
+  substances,
+  coeffMap,
+}: {
+  substances: SubstanceTotals[];
+  coeffMap: Map<string, number>;
+}) {
+  const filtered = substances.filter((s) => s.totalMoles > 1e-10);
+  return (
+    <>
+      {filtered.map((s, i) => {
+        const coeff = coeffMap.get(s.formula) ?? 1;
+        const coeffStr = formatCoeff(coeff);
+        return (
+          <Fragment key={s.formula}>
+            {i > 0 && " + "}
+            {coeffStr}
+            <FormulaText formula={s.formula} />
+          </Fragment>
+        );
+      })}
+    </>
+  );
 }
 
 export default function SystemEquationSummary({
@@ -97,9 +129,8 @@ export default function SystemEquationSummary({
   const panelRef = useRef<HTMLDivElement>(null);
 
   const intermediates = totals.filter((t) => t.role === "intermediate");
-  const excess = totals.filter((t) => t.role === "excess" && t.totalMoles > 1e-10);
 
-  const { left, right, excessStr } = buildOverallEquation(totals);
+  const { left, right, excessStr, reactants, products, excess: excessItems, coeffMap } = buildOverallEquation(totals);
 
   const handleDownloadPNG = () => {
     const padding = 40;
@@ -213,17 +244,18 @@ export default function SystemEquationSummary({
           </p>
           <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-center">
             <p className="font-mono text-xl tracking-wide text-gray-800">
-              {left}
-              {right && (
+              <FormulaEquationSide substances={reactants} coeffMap={coeffMap} />
+              {products.length > 0 && (
                 <>
                   <span className="mx-3 text-gray-400">{"\u2192"}</span>
-                  {right}
+                  <FormulaEquationSide substances={products} coeffMap={coeffMap} />
                 </>
               )}
             </p>
-            {excessStr && (
+            {excessItems.length > 0 && (
               <p className="font-mono text-lg text-amber-600 mt-1">
-                + {excessStr} <span className="text-sm text-amber-500">(excess)</span>
+                + <FormulaEquationSide substances={excessItems} coeffMap={coeffMap} />{" "}
+                <span className="text-sm text-amber-500">(excess)</span>
               </p>
             )}
           </div>
@@ -236,7 +268,12 @@ export default function SystemEquationSummary({
               Intermediates
             </span>
             <span className="text-sm text-gray-500">
-              {intermediates.map((i) => i.formula).join(", ")}
+              {intermediates.map((im, idx) => (
+                <Fragment key={im.formula}>
+                  {idx > 0 && ", "}
+                  <FormulaText formula={im.formula} />
+                </Fragment>
+              ))}
               <span className="ml-1 text-xs text-gray-400">
                 (produced and fully consumed internally)
               </span>

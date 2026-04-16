@@ -2,7 +2,10 @@ import type {
   CalculationResult,
   EconomicsSummary,
   EnergyUnit,
+  EquilibriumResult,
+  KineticsResult,
   ReactionSystem,
+  SelectivityResult,
   SubstanceTotals,
   SystemCalculationResult,
   SystemEconomics,
@@ -246,6 +249,25 @@ export function generateSystemFullCSV(
     sections.push(`Description: ${node.label}`);
     sections.push(generateQuantitiesCSV(results));
 
+    // v2: Literature lookup data
+    if (node.reaction.lookupNotes) {
+      sections.push("");
+      sections.push(`Literature Notes: ${esc(node.reaction.lookupNotes)}`);
+    }
+    if (node.reaction.rateLaw?.source) {
+      sections.push(`Kinetics Source: ${esc(node.reaction.rateLaw.source)} (${node.reaction.rateLaw.confidence ?? "unknown"} confidence)`);
+    }
+    if (node.reaction.equilibrium?.source) {
+      sections.push(`Equilibrium Source: ${esc(node.reaction.equilibrium?.source)} (${node.reaction.equilibrium.confidence ?? "unknown"} confidence)`);
+    }
+    if (node.reaction.references && node.reaction.references.length > 0) {
+      sections.push("");
+      sections.push("References:");
+      for (const ref of node.reaction.references) {
+        sections.push(`  ${esc(ref.citation)}${ref.url ? ` — ${ref.url}` : ""} [${ref.dataType}]`);
+      }
+    }
+
     if (systemThermo) {
       const thermo = systemThermo.perReaction.get(node.id);
       if (thermo) {
@@ -293,6 +315,83 @@ export function generateSystemFullCSV(
 
 function rows_push_link(sections: string[], fromLabel: string, product: string, toLabel: string, reactant: string, fraction: number) {
   sections.push([fromLabel, product, toLabel, reactant, String(fraction)].map(esc).join(","));
+}
+
+// --- v2: Equilibrium CSV ---
+
+export function generateEquilibriumCSV(
+  result: EquilibriumResult,
+  equation: string
+): string {
+  const rows: string[] = [];
+  rows.push(`Reaction,${esc(equation)}`);
+  rows.push(`Keq(T),${fmt(result.keqAtT)}`);
+  rows.push(`Q (initial),${fmt(result.reactionQuotient)}`);
+  rows.push(`Direction,${result.direction}`);
+  rows.push("");
+  rows.push(["Species", "Equilibrium Concentration (mol/L)"].map(esc).join(","));
+  for (const [formula, conc] of Object.entries(result.equilibriumConcentrations)) {
+    rows.push([plainFormula(formula), fmt(conc)].map(esc).join(","));
+  }
+  if (result.shifts.length > 0) {
+    rows.push("");
+    rows.push("=== LE CHATELIER ANALYSIS ===");
+    rows.push(["Perturbation", "Direction", "Explanation"].map(esc).join(","));
+    for (const s of result.shifts) {
+      rows.push([s.perturbation, s.direction, s.explanation].map(esc).join(","));
+    }
+  }
+  return rows.join("\n");
+}
+
+// --- v2: Kinetics CSV ---
+
+export function generateKineticsCSV(
+  result: KineticsResult,
+  equation: string
+): string {
+  const rows: string[] = [];
+  rows.push(`Reaction,${esc(equation)}`);
+  rows.push(`k(T),${fmt(result.rateConstantAtT)}`);
+  rows.push(`Initial rate,${fmt(result.rateAtT)}`);
+  if (result.halfLife !== null) rows.push(`Half-life (s),${fmt(result.halfLife)}`);
+  rows.push("");
+
+  const formulas = Object.keys(result.concentrations);
+  rows.push(["Time (s)", ...formulas.map((f) => `[${plainFormula(f)}] (mol/L)`)].map(esc).join(","));
+  for (let i = 0; i < result.timePoints.length; i++) {
+    const vals = [fmt(result.timePoints[i])];
+    for (const f of formulas) {
+      vals.push(fmt(result.concentrations[f]?.[i] ?? 0));
+    }
+    rows.push(vals.map(esc).join(","));
+  }
+  return rows.join("\n");
+}
+
+// --- v2: Selectivity CSV ---
+
+export function generateSelectivityCSV(
+  results: SelectivityResult[]
+): string {
+  const rows: string[] = [];
+  for (const result of results) {
+    rows.push(`Competing Set,${esc(result.competingSetId)}`);
+    rows.push(`Selectivity,${(result.selectivity * 100).toFixed(1)}%`);
+    rows.push(`Yield,${(result.yield * 100).toFixed(1)}%`);
+    rows.push(`Atom Economy,${(result.atomEconomy * 100).toFixed(1)}%`);
+    rows.push("");
+    rows.push(`Desired Product,${esc(result.desiredProduct.formula)},${esc(result.desiredProduct.name)},${fmt(result.desiredProduct.moles)} mol`);
+    rows.push("");
+    if (result.coProducts.length > 0) {
+      rows.push(["Co-product Formula", "Name", "Moles", "Source Reaction"].map(esc).join(","));
+      for (const cp of result.coProducts) {
+        rows.push([plainFormula(cp.formula), cp.name, fmt(cp.moles), cp.reactionLabel].map(esc).join(","));
+      }
+    }
+    rows.push("");
+  }
+  return rows.join("\n");
 }
 
 export function downloadCSV(csv: string, filename: string = "stoichiometry-results.csv") {

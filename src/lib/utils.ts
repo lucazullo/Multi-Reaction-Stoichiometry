@@ -88,3 +88,82 @@ export function parseAtoms(formula: string): Map<string, number> {
   parse(plain, 1);
   return atoms;
 }
+
+// --- Reaction-level balance check (Level 1) ---
+
+export interface ReactionBalanceResult {
+  balanced: boolean;
+  imbalances: Array<{ atom: string; left: number; right: number; delta: number }>;
+}
+
+/**
+ * Check whether a single reaction is atom-balanced.
+ * Compares total atoms on the reactant side vs the product side,
+ * accounting for stoichiometric coefficients.
+ */
+export function checkReactionBalance(
+  reactants: Array<{ formula: string; coefficient: number }>,
+  products: Array<{ formula: string; coefficient: number }>
+): ReactionBalanceResult {
+  const leftAtoms = new Map<string, number>();
+  const rightAtoms = new Map<string, number>();
+
+  for (const r of reactants) {
+    const atoms = parseAtoms(r.formula);
+    for (const [atom, count] of atoms) {
+      leftAtoms.set(atom, (leftAtoms.get(atom) ?? 0) + count * r.coefficient);
+    }
+  }
+  for (const p of products) {
+    const atoms = parseAtoms(p.formula);
+    for (const [atom, count] of atoms) {
+      rightAtoms.set(atom, (rightAtoms.get(atom) ?? 0) + count * p.coefficient);
+    }
+  }
+
+  const allAtoms = new Set([...leftAtoms.keys(), ...rightAtoms.keys()]);
+  const imbalances: ReactionBalanceResult["imbalances"] = [];
+
+  for (const atom of allAtoms) {
+    const left = leftAtoms.get(atom) ?? 0;
+    const right = rightAtoms.get(atom) ?? 0;
+    if (Math.abs(left - right) > 1e-4) {
+      imbalances.push({ atom, left, right, delta: right - left });
+    }
+  }
+
+  return { balanced: imbalances.length === 0, imbalances };
+}
+
+/**
+ * IUPAC 2021 standard atomic weights (abridged).
+ * Covers all elements likely to appear in reaction engineering.
+ */
+const ATOMIC_WEIGHTS: Record<string, number> = {
+  H: 1.008, He: 4.0026, Li: 6.941, Be: 9.0122, B: 10.81, C: 12.011,
+  N: 14.007, O: 15.999, F: 18.998, Ne: 20.180, Na: 22.990, Mg: 24.305,
+  Al: 26.982, Si: 28.085, P: 30.974, S: 32.06, Cl: 35.45, Ar: 39.948,
+  K: 39.098, Ca: 40.078, Sc: 44.956, Ti: 47.867, V: 50.942, Cr: 51.996,
+  Mn: 54.938, Fe: 55.845, Co: 58.933, Ni: 58.693, Cu: 63.546, Zn: 65.38,
+  Ga: 69.723, Ge: 72.630, As: 74.922, Se: 78.971, Br: 79.904, Kr: 83.798,
+  Rb: 85.468, Sr: 87.62, Y: 88.906, Zr: 91.224, Nb: 92.906, Mo: 95.95,
+  Ru: 101.07, Rh: 102.91, Pd: 106.42, Ag: 107.87, Cd: 112.41, In: 114.82,
+  Sn: 118.71, Sb: 121.76, Te: 127.60, I: 126.90, Xe: 131.29, Cs: 132.91,
+  Ba: 137.33, La: 138.91, Ce: 140.12, Pt: 195.08, Au: 196.97, Hg: 200.59,
+  Tl: 204.38, Pb: 207.2, Bi: 208.98, U: 238.03, W: 183.84, Ta: 180.95,
+};
+
+/**
+ * Compute molar mass from a chemical formula using standard atomic weights.
+ * Returns null if any element in the formula is not in the table.
+ */
+export function computeMolarMass(formula: string): number | null {
+  const atoms = parseAtoms(formula);
+  let mw = 0;
+  for (const [symbol, count] of atoms) {
+    const weight = ATOMIC_WEIGHTS[symbol];
+    if (weight === undefined) return null; // unknown element
+    mw += weight * count;
+  }
+  return Math.round(mw * 100) / 100; // round to 2 decimal places
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import FormulaText from "./FormulaText";
 import type { SubstanceTotals, ReactionSystem } from "@/lib/types";
 import { normalizeFormula } from "@/lib/utils";
 
@@ -206,7 +207,7 @@ export default function PhysicalPropertiesTable({
             return (
               <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-2 pr-3">
-                  <span className="font-semibold">{t.formula}</span>
+                  <FormulaText formula={t.formula} className="font-semibold" />
                   <span className="ml-1 text-xs text-gray-400">({t.name})</span>
                 </td>
                 <td className="py-2 pr-3">

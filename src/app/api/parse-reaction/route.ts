@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { SYSTEM_PROMPT, TOOL_SCHEMA } from "@/lib/prompt";
 import type { BalancedReaction, Substance } from "@/lib/types";
+import { computeMolarMass, normalizeFormula } from "@/lib/utils";
+import { lookupSubstanceWithAlias } from "@/lib/substance-data";
 
 const client = new Anthropic();
 
@@ -53,15 +55,32 @@ export async function POST(request: Request) {
       products: Array<Omit<Substance, "role">>;
     };
 
-    // Ensure all optional fields have defaults
-    const withDefaults = (s: Record<string, unknown>) => ({
-      ...s,
-      density: s.density ?? null,
-      densityGas: s.densityGas ?? null,
-      hhv: s.hhv ?? null,
-      lhv: s.lhv ?? null,
-      enthalpyOfFormation: s.enthalpyOfFormation ?? 0,
-    });
+    // Normalise properties: deterministic values + reference DB overrides
+    const withDefaults = (s: Record<string, unknown>) => {
+      const formula = String(s.formula ?? "");
+      const key = normalizeFormula(formula);
+      const ref = lookupSubstanceWithAlias(key);
+
+      // Layer 1a: deterministic molar mass
+      const computedMW = computeMolarMass(formula);
+      const molarMass = computedMW ?? (s.molarMass as number);
+
+      // Layer 1b: deterministic gas density for gases
+      const state = String(s.state ?? "gas");
+      const densityGas = state === "gas"
+        ? Math.round((molarMass / 22.414) * 10000) / 10000
+        : (s.densityGas ?? null);
+
+      return {
+        ...s,
+        molarMass,
+        density: ref?.density ?? s.density ?? null,
+        densityGas,
+        enthalpyOfFormation: ref?.enthalpyOfFormation ?? s.enthalpyOfFormation ?? 0,
+        hhv: ref?.hhv ?? s.hhv ?? null,
+        lhv: ref?.lhv ?? s.lhv ?? null,
+      };
+    };
 
     const data: BalancedReaction = {
       equation: raw.equation,

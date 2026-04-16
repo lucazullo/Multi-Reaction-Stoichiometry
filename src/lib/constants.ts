@@ -27,3 +27,8 @@ export const KG_PER_METRIC_TONNE = 1000;  // metric tonne
 
 // Methane higher heating value: 1 MMBTU = 19.01 kg CH₄ at standard conditions
 export const METHANE_KG_PER_MMBTU = 19.01;
+
+// --- v2: Physical constants ---
+export const R_GAS = 8.314e-3; // kJ/(mol·K) — gas constant (note: kJ, not J, to match ΔH units)
+export const R_GAS_J = 8.314;  // J/(mol·K) — gas constant in J for Arrhenius
+export const STANDARD_TEMPERATURE = 298.15; // K (25°C)

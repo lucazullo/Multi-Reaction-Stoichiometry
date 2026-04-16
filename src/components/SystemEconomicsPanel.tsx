@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SubstanceTotals, SystemEconLine, SystemEconomics } from "@/lib/types";
 import { METHANE_KG_PER_MMBTU } from "@/lib/constants";
+import FormulaText from "./FormulaText";
 import { normalizeFormula } from "@/lib/utils";
 
 export type SavedPrices = Array<{ value: string; unit: string }>;
@@ -136,7 +137,7 @@ export default function SystemEconomicsPanel({
                 <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_STYLES[t.role] ?? ""}`}>
                   {ROLE_LABELS[t.role] ?? t.role}
                 </span>
-                <span className="text-sm font-semibold text-gray-700">{t.formula}</span>
+                <FormulaText formula={t.formula} className="text-sm font-semibold text-gray-700" />
                 <span className="text-xs text-gray-400">({t.name})</span>
               </div>
               <div className="flex items-center gap-1">

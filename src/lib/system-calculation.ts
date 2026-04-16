@@ -15,7 +15,14 @@ import {
   calculateStoichiometry,
   calculateThermodynamics,
 } from "./conversion";
-import { normalizeFormula, parseAtoms } from "./utils";
+import { normalizeFormula, parseAtoms, computeMolarMass } from "./utils";
+import { lookupSubstanceWithAlias, validateSubstanceProperties } from "./substance-data";
+import type { PropertyWarning } from "./substance-data";
+
+/** Compute ideal gas density at STP (0 °C, 1 atm) in kg/m³ */
+function idealGasDensitySTP(molarMass: number): number {
+  return Math.round((molarMass / 22.414) * 10000) / 10000;
+}
 
 /**
  * Calculate the full reaction system starting from any reaction + substance.
@@ -29,6 +36,74 @@ export function calculateSystem(
 ): SystemCalculationResult {
   const perReaction = new Map<string, CalculationResult[]>();
   const nodeMap = new Map(system.nodes.map((n) => [n.id, n]));
+  const propertyWarnings: PropertyWarning[] = [];
+
+  // ── Property normalisation (Layers 1–4) ────────────────────────────
+  // Track first-seen properties per formula for cross-reaction consistency (Layer 3).
+  const firstSeen = new Map<string, {
+    density: number | null;
+    enthalpyOfFormation: number;
+    hhv: number | null;
+    lhv: number | null;
+    state: string;
+  }>();
+
+  for (const node of system.nodes) {
+    for (const s of [...node.reaction.reactants, ...node.reaction.products]) {
+      const key = normalizeFormula(s.formula);
+
+      // Layer 1a: Deterministic molar mass from IUPAC atomic weights
+      const computedMW = computeMolarMass(s.formula);
+      if (computedMW !== null) {
+        s.molarMass = computedMW;
+      }
+
+      // Layer 1b: Deterministic gas density at STP
+      if (s.state === "gas") {
+        s.densityGas = idealGasDensitySTP(s.molarMass);
+      }
+
+      // Layer 2: Override with reference database when available
+      const ref = lookupSubstanceWithAlias(key);
+      if (ref) {
+        s.density = ref.density;
+        s.enthalpyOfFormation = ref.enthalpyOfFormation;
+        s.hhv = ref.hhv;
+        s.lhv = ref.lhv;
+        // Don't override state — user may have intentionally changed it
+      }
+
+      // Layer 3: Cross-reaction consistency — first-seen wins for non-ref substances
+      if (!ref) {
+        const existing = firstSeen.get(key);
+        if (existing) {
+          // Use the first-seen values for consistency
+          s.density = existing.density;
+          s.enthalpyOfFormation = existing.enthalpyOfFormation;
+          s.hhv = existing.hhv;
+          s.lhv = existing.lhv;
+        } else {
+          firstSeen.set(key, {
+            density: s.density,
+            enthalpyOfFormation: s.enthalpyOfFormation,
+            hhv: s.hhv ?? null,
+            lhv: s.lhv ?? null,
+            state: s.state,
+          });
+        }
+      }
+
+      // Layer 4: Validation constraints
+      const warnings = validateSubstanceProperties(key, {
+        state: s.state,
+        density: s.density,
+        enthalpyOfFormation: s.enthalpyOfFormation,
+        hhv: s.hhv ?? null,
+        lhv: s.lhv ?? null,
+      });
+      propertyWarnings.push(...warnings);
+    }
+  }
 
   // Build adjacency lists in both directions
   const outgoingLinks = new Map<string, SeriesLink[]>();
@@ -48,118 +123,129 @@ export function calculateSystem(
   const startResults = calculateStoichiometry(startNode.reaction, input);
   perReaction.set(startReactionId, startResults);
 
-  // 2. Forward propagation
-  // Use topological order to ensure all incoming links are resolved before calculating
-  const forwardOrder = topologicalForward(system, startReactionId, outgoingLinks);
+  // 2. Iterative forward + backward propagation
+  // We alternate forward and backward passes until no new nodes are calculated.
+  // This handles cases like: start at rxn-1 → backward discovers rxn-8 →
+  // forward from rxn-8 discovers rxn-2 and rxn-4 (sibling branches).
+  let changed = true;
+  while (changed) {
+    changed = false;
 
-  for (const nodeId of forwardOrder) {
-    if (nodeId === startReactionId) continue; // already calculated
-    if (perReaction.has(nodeId)) continue;
+    // Forward pass: propagate from all calculated nodes to their downstream
+    const forwardOrder = topologicalForwardAll(system, perReaction, outgoingLinks);
 
-    const node = nodeMap.get(nodeId);
-    if (!node) continue;
+    for (const nodeId of forwardOrder) {
+      if (perReaction.has(nodeId)) continue;
 
-    // Gather all incoming links from already-calculated reactions
-    const incoming = (incomingLinks.get(nodeId) ?? []).filter(
-      (l) => perReaction.has(l.fromReactionId)
-    );
-    if (incoming.length === 0) continue;
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
 
-    // For each incoming link, compute moles available for the target reactant
-    const reactantMoles = new Map<number, number>();
+      // Gather all incoming links from already-calculated reactions
+      const incoming = (incomingLinks.get(nodeId) ?? []).filter(
+        (l) => perReaction.has(l.fromReactionId)
+      );
+      if (incoming.length === 0) continue;
 
-    for (const link of incoming) {
-      const sourceResults = perReaction.get(link.fromReactionId)!;
-      const sourceNode = nodeMap.get(link.fromReactionId)!;
-      const productResultIndex =
-        sourceNode.reaction.reactants.length + link.fromProductIndex;
-      const productResult = sourceResults[productResultIndex];
-      if (!productResult) continue;
+      // For each incoming link, compute moles available for the target reactant
+      const reactantMoles = new Map<number, number>();
 
-      const molesAvailable = productResult.moles * link.fraction;
-      const existing = reactantMoles.get(link.toReactantIndex) ?? 0;
-      reactantMoles.set(link.toReactantIndex, existing + molesAvailable);
-    }
+      for (const link of incoming) {
+        const sourceResults = perReaction.get(link.fromReactionId)!;
+        const sourceNode = nodeMap.get(link.fromReactionId)!;
+        const productResultIndex =
+          sourceNode.reaction.reactants.length + link.fromProductIndex;
+        const productResult = sourceResults[productResultIndex];
+        if (!productResult) continue;
 
-    if (reactantMoles.size === 0) continue;
-
-    // Find limiting reactant (smallest scale factor)
-    let minScale = Infinity;
-    let limitingIdx = 0;
-    let limitingMoles = 0;
-
-    for (const [reactantIndex, moles] of reactantMoles) {
-      const substance = node.reaction.reactants[reactantIndex];
-      if (!substance) continue;
-      const scale = moles / substance.coefficient;
-      if (scale < minScale) {
-        minScale = scale;
-        limitingIdx = reactantIndex;
-        limitingMoles = moles;
+        // v2: Apply source reaction's conversion factor to product moles
+        const sourceConversion = sourceNode.reaction.conversion ?? 1.0;
+        const molesAvailable = productResult.moles * sourceConversion * link.fraction;
+        const existing = reactantMoles.get(link.toReactantIndex) ?? 0;
+        reactantMoles.set(link.toReactantIndex, existing + molesAvailable);
       }
+
+      if (reactantMoles.size === 0) continue;
+
+      // Find limiting reactant (smallest scale factor)
+      let minScale = Infinity;
+      let limitingIdx = 0;
+      let limitingMoles = 0;
+
+      for (const [reactantIndex, moles] of reactantMoles) {
+        const substance = node.reaction.reactants[reactantIndex];
+        if (!substance) continue;
+        const scale = moles / substance.coefficient;
+        if (scale < minScale) {
+          minScale = scale;
+          limitingIdx = reactantIndex;
+          limitingMoles = moles;
+        }
+      }
+
+      const results = calculateStoichiometry(node.reaction, {
+        substanceIndex: limitingIdx,
+        amount: limitingMoles,
+        unit: "mol",
+      });
+      perReaction.set(nodeId, results);
+      changed = true;
     }
 
-    const results = calculateStoichiometry(node.reaction, {
-      substanceIndex: limitingIdx,
-      amount: limitingMoles,
-      unit: "mol",
-    });
-    perReaction.set(nodeId, results);
-  }
+    // Backward pass: propagate from all calculated nodes to their upstream
+    const backwardOrder = topologicalBackwardAll(system, perReaction, incomingLinks);
 
-  // 3. Backward propagation
-  const backwardOrder = topologicalBackward(system, startReactionId, incomingLinks);
+    for (const nodeId of backwardOrder) {
+      if (perReaction.has(nodeId)) continue;
 
-  for (const nodeId of backwardOrder) {
-    if (nodeId === startReactionId) continue;
-    if (perReaction.has(nodeId)) continue;
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
 
-    const node = nodeMap.get(nodeId);
-    if (!node) continue;
+      // Find outgoing links to already-calculated reactions
+      const outgoing = (outgoingLinks.get(nodeId) ?? []).filter(
+        (l) => perReaction.has(l.toReactionId)
+      );
+      if (outgoing.length === 0) continue;
 
-    // Find outgoing links to already-calculated reactions
-    const outgoing = (outgoingLinks.get(nodeId) ?? []).filter(
-      (l) => perReaction.has(l.toReactionId)
-    );
-    if (outgoing.length === 0) continue;
+      // For each outgoing link, compute how much product this reaction must produce
+      // to satisfy the downstream reactant needs
+      let maxScale = 0;
 
-    // For each outgoing link, compute how much product this reaction must produce
-    // to satisfy the downstream reactant needs
-    let maxScale = 0;
+      for (const link of outgoing) {
+        const targetResults = perReaction.get(link.toReactionId)!;
+        const reactantResult = targetResults[link.toReactantIndex];
+        if (!reactantResult) continue;
 
-    for (const link of outgoing) {
-      const targetResults = perReaction.get(link.toReactionId)!;
-      const reactantResult = targetResults[link.toReactantIndex];
-      if (!reactantResult) continue;
+        // How much does the downstream need from us?
+        const molesNeeded = reactantResult.moles / (link.fraction || 1);
+        const productSubstance = node.reaction.products[link.fromProductIndex];
+        if (!productSubstance) continue;
+        const scale = molesNeeded / productSubstance.coefficient;
 
-      // How much does the downstream need from us?
-      const molesNeeded = reactantResult.moles / (link.fraction || 1);
-      const productSubstance = node.reaction.products[link.fromProductIndex];
-      if (!productSubstance) continue;
-      const scale = molesNeeded / productSubstance.coefficient;
+        // Use the largest scale (must produce enough for ALL downstream consumers)
+        if (scale > maxScale) maxScale = scale;
+      }
 
-      // Use the largest scale (must produce enough for ALL downstream consumers)
-      if (scale > maxScale) maxScale = scale;
+      if (maxScale === 0) continue;
+
+      // Calculate using the first outgoing link's product as reference,
+      // scaled to the max needed
+      const refLink = outgoing[0];
+      const productIndex =
+        node.reaction.reactants.length + refLink.fromProductIndex;
+      const molesNeeded = maxScale * node.reaction.products[refLink.fromProductIndex].coefficient;
+
+      const results = calculateStoichiometry(node.reaction, {
+        substanceIndex: productIndex,
+        amount: molesNeeded,
+        unit: "mol",
+      });
+      perReaction.set(nodeId, results);
+      changed = true;
     }
-
-    if (maxScale === 0) continue;
-
-    // Calculate using the first outgoing link's product as reference,
-    // scaled to the max needed
-    const refLink = outgoing[0];
-    const productIndex =
-      node.reaction.reactants.length + refLink.fromProductIndex;
-    const molesNeeded = maxScale * node.reaction.products[refLink.fromProductIndex].coefficient;
-
-    const results = calculateStoichiometry(node.reaction, {
-      substanceIndex: productIndex,
-      amount: molesNeeded,
-      unit: "mol",
-    });
-    perReaction.set(nodeId, results);
   }
 
   const totals = aggregateSubstances(system, perReaction);
+  const balanceCheck = checkBalance(perReaction);
 
   // Build debug info for UI display
   const debugLines: string[] = [];
@@ -185,17 +271,22 @@ export function calculateSystem(
     debugLines.push(`  ${normalizeFormula(t.formula)}: produced=${t.produced.toPrecision(4)}, consumed=${t.consumed.toPrecision(4)}, net=${t.totalMoles.toPrecision(4)}, role=${t.role}`);
   }
 
-  const balanceCheck = checkBalance(perReaction);
-
-  return { perReaction, totals, balanceCheck, debugInfo: debugLines.join("\n") };
+  return {
+    perReaction,
+    totals,
+    balanceCheck,
+    debugInfo: debugLines.join("\n"),
+    propertyWarnings: propertyWarnings.length > 0 ? propertyWarnings : undefined,
+  };
 }
 
 /**
- * Get forward topological order starting from startId.
+ * Get forward topological order starting from ALL already-calculated nodes.
+ * This ensures sibling branches are discovered after backward propagation.
  */
-function topologicalForward(
+function topologicalForwardAll(
   system: ReactionSystem,
-  startId: string,
+  calculated: Map<string, CalculationResult[]>,
   outgoingLinks: Map<string, SeriesLink[]>
 ): string[] {
   const visited = new Set<string>();
@@ -210,16 +301,20 @@ function topologicalForward(
     order.push(id);
   }
 
-  dfs(startId);
+  // Start DFS from every already-calculated node
+  for (const nodeId of calculated.keys()) {
+    dfs(nodeId);
+  }
+
   return order.reverse(); // topological order
 }
 
 /**
- * Get backward topological order starting from startId.
+ * Get backward topological order starting from ALL already-calculated nodes.
  */
-function topologicalBackward(
+function topologicalBackwardAll(
   system: ReactionSystem,
-  startId: string,
+  calculated: Map<string, CalculationResult[]>,
   incomingLinks: Map<string, SeriesLink[]>
 ): string[] {
   const visited = new Set<string>();
@@ -234,7 +329,11 @@ function topologicalBackward(
     order.push(id);
   }
 
-  dfs(startId);
+  // Start DFS from every already-calculated node
+  for (const nodeId of calculated.keys()) {
+    dfs(nodeId);
+  }
+
   return order.reverse();
 }
 
@@ -242,84 +341,6 @@ function topologicalBackward(
  * Aggregate all substances across reactions into net totals.
  * Tracks excess/deficit for linked substances.
  */
-/**
- * Check atom-level and mass-level balance across all reactions.
- * For a correctly balanced system, atoms in = atoms out and mass in = mass out.
- */
-function checkBalance(
-  perReaction: Map<string, CalculationResult[]>
-): BalanceCheck {
-  const TOLERANCE = 0.01; // 1% relative tolerance
-
-  // Atom balance: sum atoms on each side across all reactions
-  const atomsConsumed = new Map<string, number>();
-  const atomsProduced = new Map<string, number>();
-  let totalMassIn = 0;  // grams
-  let totalMassOut = 0;
-
-  for (const [, results] of perReaction) {
-    for (const r of results) {
-      const atoms = parseAtoms(r.substance.formula);
-      const massGrams = r.moles * r.substance.molarMass;
-
-      if (r.substance.role === "reactant") {
-        totalMassIn += massGrams;
-        for (const [atom, count] of atoms) {
-          atomsConsumed.set(atom, (atomsConsumed.get(atom) ?? 0) + count * r.moles);
-        }
-      } else {
-        totalMassOut += massGrams;
-        for (const [atom, count] of atoms) {
-          atomsProduced.set(atom, (atomsProduced.get(atom) ?? 0) + count * r.moles);
-        }
-      }
-    }
-  }
-
-  // Build atom balance report
-  const allAtoms = new Set([...atomsConsumed.keys(), ...atomsProduced.keys()]);
-  const atomBalances: AtomBalance[] = [];
-  let allAtomsBalanced = true;
-
-  for (const atom of allAtoms) {
-    const prod = atomsProduced.get(atom) ?? 0;
-    const cons = atomsConsumed.get(atom) ?? 0;
-    const delta = prod - cons;
-    const maxVal = Math.max(Math.abs(prod), Math.abs(cons), 1e-10);
-    const balanced = Math.abs(delta) / maxVal < TOLERANCE;
-    if (!balanced) allAtomsBalanced = false;
-    atomBalances.push({ atom, produced: prod, consumed: cons, delta, balanced });
-  }
-
-  // Sort atoms: C, H, O, N first, then alphabetical
-  const atomOrder: Record<string, number> = { C: 0, H: 1, O: 2, N: 3 };
-  atomBalances.sort((a, b) => {
-    const oa = atomOrder[a.atom] ?? 99;
-    const ob = atomOrder[b.atom] ?? 99;
-    if (oa !== ob) return oa - ob;
-    return a.atom.localeCompare(b.atom);
-  });
-
-  // Mass balance
-  const massDelta = totalMassOut - totalMassIn;
-  const massDeltaPercent = totalMassIn > 0 ? (massDelta / totalMassIn) * 100 : 0;
-  const massBalanced = Math.abs(massDeltaPercent) < TOLERANCE * 100;
-
-  const mass: MassBalance = {
-    totalMassIn,
-    totalMassOut,
-    delta: massDelta,
-    deltaPercent: massDeltaPercent,
-    balanced: massBalanced,
-  };
-
-  return {
-    atoms: atomBalances,
-    mass,
-    allBalanced: allAtomsBalanced && massBalanced,
-  };
-}
-
 function aggregateSubstances(
   system: ReactionSystem,
   perReaction: Map<string, CalculationResult[]>
@@ -434,6 +455,78 @@ function aggregateSubstances(
   totals.sort((a, b) => (roleOrder[a.role] ?? 5) - (roleOrder[b.role] ?? 5));
 
   return totals;
+}
+
+/**
+ * Check atom-level and mass-level balance across all reactions.
+ * For a correctly balanced system, atoms in = atoms out and mass in = mass out.
+ */
+function checkBalance(
+  perReaction: Map<string, CalculationResult[]>
+): BalanceCheck {
+  const TOLERANCE = 0.01; // 1% relative tolerance
+
+  // Atom balance: sum atoms on each side across all reactions
+  const atomsConsumed = new Map<string, number>();
+  const atomsProduced = new Map<string, number>();
+  let totalMassIn = 0;  // grams
+  let totalMassOut = 0;
+
+  for (const [, results] of perReaction) {
+    for (const r of results) {
+      const atoms = parseAtoms(r.substance.formula);
+      const massGrams = r.moles * r.substance.molarMass;
+
+      if (r.substance.role === "reactant") {
+        totalMassIn += massGrams;
+        for (const [atom, count] of atoms) {
+          atomsConsumed.set(atom, (atomsConsumed.get(atom) ?? 0) + count * r.moles);
+        }
+      } else {
+        totalMassOut += massGrams;
+        for (const [atom, count] of atoms) {
+          atomsProduced.set(atom, (atomsProduced.get(atom) ?? 0) + count * r.moles);
+        }
+      }
+    }
+  }
+
+  // Build atom balance report
+  const allAtoms = new Set([...atomsConsumed.keys(), ...atomsProduced.keys()]);
+  const atomBalances: AtomBalance[] = [];
+  let allAtomsBalanced = true;
+
+  for (const atom of allAtoms) {
+    const cons = atomsConsumed.get(atom) ?? 0;
+    const prod = atomsProduced.get(atom) ?? 0;
+    const delta = prod - cons;
+    const maxVal = Math.max(prod, cons);
+    const balanced = maxVal === 0 || Math.abs(delta) / maxVal < TOLERANCE;
+    if (!balanced) allAtomsBalanced = false;
+
+    atomBalances.push({ atom, produced: prod, consumed: cons, delta, balanced });
+  }
+
+  atomBalances.sort((a, b) => a.atom.localeCompare(b.atom));
+
+  // Mass balance
+  const massDelta = totalMassOut - totalMassIn;
+  const massDeltaPercent = totalMassIn > 0 ? (massDelta / totalMassIn) * 100 : 0;
+  const massBalanced = totalMassIn === 0 || Math.abs(massDeltaPercent) < TOLERANCE * 100;
+
+  const mass: MassBalance = {
+    totalMassIn,
+    totalMassOut,
+    delta: massDelta,
+    deltaPercent: massDeltaPercent,
+    balanced: massBalanced,
+  };
+
+  return {
+    atoms: atomBalances,
+    mass,
+    allBalanced: allAtomsBalanced && massBalanced,
+  };
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { SubstanceTotals } from "@/lib/types";
+import FormulaText from "./FormulaText";
 
 interface SystemTotalsTableProps {
   totals: SubstanceTotals[];
@@ -56,7 +57,7 @@ export default function SystemTotalsTable({ totals }: SystemTotalsTableProps) {
                 }`}
               >
                 <td className="py-3 pr-4">
-                  <span className="font-semibold">{t.formula}</span>
+                  <FormulaText formula={t.formula} className="font-semibold" />
                   <span className="ml-1 text-xs text-gray-400">({t.name})</span>
                 </td>
                 <td className="py-3 pr-4">
@@ -100,7 +101,7 @@ export default function SystemTotalsTable({ totals }: SystemTotalsTableProps) {
               >
                 <span className="font-semibold flex-shrink-0">
                   {t.role === "excess" ? "\u26A0" : t.role === "deficit" ? "\u274C" : "\u2139\uFE0F"}{" "}
-                  {t.formula}:
+                  <FormulaText formula={t.formula} />:
                 </span>
                 <span>{t.note}</span>
               </div>

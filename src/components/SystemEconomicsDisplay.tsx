@@ -1,4 +1,5 @@
 import type { SystemEconomics } from "@/lib/types";
+import FormulaText from "./FormulaText";
 
 interface SystemEconomicsDisplayProps {
   economics: SystemEconomics;
@@ -44,7 +45,7 @@ export default function SystemEconomicsDisplay({
             {perSubstance.map((e, i) => (
               <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
                 <td className="py-2 pr-4">
-                  <span className="font-semibold">{e.formula}</span>
+                  <FormulaText formula={e.formula} className="font-semibold" />
                   <span className="ml-1 text-xs text-gray-400">({e.name})</span>
                 </td>
                 <td className="py-2 pr-4">

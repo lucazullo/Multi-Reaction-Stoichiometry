@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Multi-Reaction Stoichiometry Calculator",
-  description: "Build parallel and sequential reaction systems with stoichiometry, thermodynamics, and economics",
+  title: "ReactionIQ — Advanced Reaction Engineering Calculator",
+  description: "Build reaction systems with stoichiometry, kinetics, equilibria, selectivity, thermodynamics, and economics",
 };
 
 export default function RootLayout({

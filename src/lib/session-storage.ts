@@ -77,7 +77,10 @@ function serializeResult(
 }
 
 function deserializeResult(
-  data: SerializedSystemResult & { balanceCheck?: SystemCalculationResult["balanceCheck"] }
+  data: SerializedSystemResult & {
+    balanceCheck?: SystemCalculationResult["balanceCheck"];
+    propertyWarnings?: SystemCalculationResult["propertyWarnings"];
+  }
 ): SystemCalculationResult {
   return {
     perReaction: new Map(data.perReaction),
@@ -87,6 +90,7 @@ function deserializeResult(
       mass: { totalMassIn: 0, totalMassOut: 0, delta: 0, deltaPercent: 0, balanced: true },
       allBalanced: true,
     },
+    propertyWarnings: data.propertyWarnings,
   };
 }
 

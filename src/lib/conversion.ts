@@ -59,6 +59,12 @@ export function fromMoles(
   };
 }
 
+/**
+ * Pure stoichiometric calculation (100% conversion).
+ * The conversion factor (reaction.conversion) is applied downstream:
+ * - In system-calculation.ts when propagating through links
+ * - In applyConversion() for single-reaction display
+ */
 export function calculateStoichiometry(
   reaction: BalancedReaction,
   input: CalculationInput
@@ -74,6 +80,27 @@ export function calculateStoichiometry(
     const targetMoles =
       inputMoles * (substance.coefficient / selected.coefficient);
     return fromMoles(targetMoles, substance);
+  });
+}
+
+/**
+ * v2: Apply fractional conversion to stoichiometric results.
+ * Products are scaled by conversion. Reactants show consumed amount (= stoich × conversion).
+ * Returns a new array — does not mutate.
+ */
+export function applyConversion(
+  results: CalculationResult[],
+  reaction: BalancedReaction
+): CalculationResult[] {
+  const conversion = reaction.conversion ?? 1.0;
+  if (conversion >= 1.0) return results; // no change needed
+
+  return results.map((r) => {
+    if (r.substance.role === "product") {
+      return fromMoles(r.moles * conversion, r.substance);
+    }
+    // Reactants: consumed = stoich × conversion
+    return fromMoles(r.moles * conversion, r.substance);
   });
 }
 

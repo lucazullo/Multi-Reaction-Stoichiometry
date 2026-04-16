@@ -18,6 +18,119 @@ export interface BalancedReaction {
   equation: string; // e.g. "2H₂ + O₂ → 2H₂O"
   reactants: Substance[];
   products: Substance[];
+  // --- v2 additions (all optional — undefined = v1 behavior) ---
+  rateLaw?: RateLaw;
+  equilibrium?: EquilibriumData;
+  conversion?: number; // 0–1 fractional conversion of limiting reactant; undefined = 1.0 (complete)
+  references?: Reference[]; // literature sources for kinetic/equilibrium data
+  lookupNotes?: string; // additional caveats/notes from literature lookup
+}
+
+// --- v2: Kinetics ---
+
+export type DataConfidence = "high" | "medium" | "low";
+
+export interface RateLaw {
+  expression: string;              // display string, e.g. "k[A][B]"
+  order: number;                   // overall reaction order
+  partialOrders: Record<string, number>; // formula → partial order
+  rateConstant: number;            // k at referenceTemperature
+  rateConstantUnit: string;        // e.g. "L/(mol·s)" for 2nd order
+  referenceTemperature: number;    // K, typically 298.15
+  activationEnergy: number;        // Ea in kJ/mol
+  preExponentialFactor: number;    // A (same units as k)
+  source?: string;                 // literature source description
+  confidence?: DataConfidence;     // confidence in the data
+}
+
+export interface KineticsResult {
+  reactionId: string;
+  timePoints: number[];                    // seconds
+  concentrations: Record<string, number[]>; // formula → [c] at each time point
+  halfLife: number | null;                 // seconds, if applicable
+  reversible: boolean;                     // true if equilibrium was considered
+  keqAtT: number | null;                   // Keq(T) used, if reversible
+  kReverseAtT: number | null;              // k_reverse at T, if reversible
+  rateAtT: number;                         // rate at calculation temperature
+  rateConstantAtT: number;                 // k(T) via Arrhenius
+}
+
+// --- v2: Equilibrium ---
+
+export interface EquilibriumData {
+  keq: number;                   // equilibrium constant at referenceTemperature
+  referenceTemperature: number;  // K
+  deltaH: number;                // kJ/mol — for van't Hoff temperature dependence
+  source?: string;               // literature source description
+  confidence?: DataConfidence;   // confidence in the data
+}
+
+export interface LeChatelierShift {
+  perturbation: string;          // e.g. "Increase temperature"
+  direction: "forward" | "reverse";
+  explanation: string;
+}
+
+export interface EquilibriumResult {
+  reactionId: string;
+  keqAtT: number;                                  // Keq at calculation temperature
+  equilibriumConcentrations: Record<string, number>; // formula → [c]_eq in mol/L
+  reactionQuotient: number;                         // Q for current state
+  direction: "forward" | "reverse" | "at-equilibrium";
+  shifts: LeChatelierShift[];
+}
+
+// --- v2: Selectivity ---
+
+export interface CompetingReactionSet {
+  id: string;
+  label: string;                   // e.g. "Ethylene oxidation pathways"
+  primaryReactionId: string;       // desired reaction
+  competingReactionIds: string[];  // undesired side reactions
+  sharedReactantFormula: string;   // key shared reactant that splits between them
+  allocations: Record<string, number>; // reactionId → fraction (0–1), must sum ≤ 1.0
+}
+
+export interface SelectivityResult {
+  competingSetId: string;
+  desiredProduct: { formula: string; name: string; moles: number };
+  coProducts: Array<{
+    formula: string;
+    name: string;
+    moles: number;
+    fromReactionId: string;
+    reactionLabel: string;
+  }>;
+  selectivity: number;   // moles desired / (moles desired + moles undesired)
+  yield: number;         // moles desired / moles reactant fed
+  atomEconomy: number;   // MW desired × coeff / sum(MW all products × coeff)
+}
+
+// --- v2: Literature References ---
+
+export interface Reference {
+  citation: string;      // e.g. "Smith, J. et al. (2024). J. Phys. Chem. A, 128(3), 456-462"
+  url: string | null;    // link to online source (DOI, NIST page, etc.)
+  dataType: string;      // what this reference supports, e.g. "rate constant", "Keq"
+}
+
+// --- v2: Literature Lookup API ---
+
+export interface LookupRequest {
+  equation: string;
+  reactants: string[];
+  products: string[];
+  useWebSearch: boolean;
+  requestedData: ("kinetics" | "equilibrium" | "thermodynamic")[];
+}
+
+export interface LookupResponse {
+  success: boolean;
+  rateLaw?: RateLaw & { source: string; confidence: "high" | "medium" | "low" };
+  equilibrium?: EquilibriumData & { source: string; confidence: "high" | "medium" | "low" };
+  references: Reference[];
+  additionalNotes?: string;
+  error?: string;
 }
 
 export type MassUnit = "g" | "kg" | "lb";
@@ -94,7 +207,25 @@ export interface SeriesLink {
 export interface ReactionSystem {
   nodes: ReactionNode[];
   links: SeriesLink[];
+  // --- v2 additions ---
+  competingSets?: CompetingReactionSet[];
 }
+
+// --- v2: System-level result types ---
+
+export interface SystemKineticsResult {
+  perReaction: Map<string, KineticsResult>;
+}
+
+export interface SystemEquilibriumResult {
+  perReaction: Map<string, EquilibriumResult>;
+}
+
+export interface SystemSelectivityResult {
+  perSet: Map<string, SelectivityResult>;
+}
+
+export type AppMode = "basic" | "advanced";
 
 export interface SubstanceTotals {
   formula: string;
@@ -141,6 +272,7 @@ export interface SystemCalculationResult {
   balanceCheck: BalanceCheck;
   totals: SubstanceTotals[];
   debugInfo?: string;
+  propertyWarnings?: Array<{ formula: string; field: string; message: string; severity: "error" | "warning" }>;
 }
 
 export interface SystemThermodynamics {

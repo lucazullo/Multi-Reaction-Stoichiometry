@@ -1,14 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import type { ReactionNode } from "@/lib/types";
+import { useState, useMemo } from "react";
+import type { BalancedReaction, ReactionNode } from "@/lib/types";
+import { checkReactionBalance } from "@/lib/utils";
 import EquationDisplay from "./EquationDisplay";
+import StoichiometryEditor from "./StoichiometryEditor";
+
+/** Default tolerance: imbalances below this are silently accepted */
+const AUTO_ACCEPT_TOLERANCE = 1e-4;
 
 interface ReactionCardProps {
   node: ReactionNode;
   index: number;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onEditReaction?: (id: string, reaction: BalancedReaction) => void;
 }
 
 export default function ReactionCard({
@@ -16,22 +22,40 @@ export default function ReactionCard({
   index,
   onDelete,
   onRename,
+  onEditReaction,
 }: ReactionCardProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [namingMode, setNamingMode] = useState(false);
   const [nameInput, setNameInput] = useState(node.displayName ?? "");
+  const [editingStoich, setEditingStoich] = useState(false);
+  const [balanceAccepted, setBalanceAccepted] = useState(false);
+
+  const balanceCheck = useMemo(
+    () => checkReactionBalance(node.reaction.reactants, node.reaction.products),
+    [node.reaction.reactants, node.reaction.products]
+  );
+
+  // Show warning only if there are imbalances the user hasn't accepted
+  const showBalanceWarning = !balanceCheck.balanced && !balanceAccepted;
 
   const displayTitle = node.displayName
-    ? `Reaction ${index + 1} — ${node.displayName}`
+    ? `Reaction ${index + 1} \u2014 ${node.displayName}`
     : `Reaction ${index + 1}`;
 
   const handleSaveName = () => {
     onRename(node.id, nameInput.trim());
-    setEditing(false);
+    setNamingMode(false);
+  };
+
+  const handleSaveStoich = (updatedReaction: BalancedReaction) => {
+    onEditReaction?.(node.id, updatedReaction);
+    setEditingStoich(false);
+    setBalanceAccepted(false); // re-evaluate after edit
   };
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      {/* Header */}
       <div className="flex items-center justify-between px-6 py-3 bg-gray-50 border-b border-gray-200">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <button
@@ -54,8 +78,19 @@ export default function ReactionCard({
           </span>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
+          {onEditReaction && (
+            <button
+              onClick={() => setEditingStoich(!editingStoich)}
+              className={`transition p-1 ${editingStoich ? "text-amber-600" : "text-gray-400 hover:text-amber-600"}`}
+              title="Edit stoichiometry"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+              </svg>
+            </button>
+          )}
           <button
-            onClick={() => { setEditing(!editing); setNameInput(node.displayName ?? ""); }}
+            onClick={() => { setNamingMode(!namingMode); setNameInput(node.displayName ?? ""); }}
             className="text-gray-400 hover:text-teal-600 transition p-1"
             title="Name this reaction"
           >
@@ -74,7 +109,9 @@ export default function ReactionCard({
           </button>
         </div>
       </div>
-      {editing && (
+
+      {/* Rename bar */}
+      {namingMode && (
         <div className="flex gap-2 px-6 py-2 bg-gray-50 border-b border-gray-100">
           <input
             type="text"
@@ -92,16 +129,68 @@ export default function ReactionCard({
             Save
           </button>
           <button
-            onClick={() => setEditing(false)}
+            onClick={() => setNamingMode(false)}
             className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
           >
             Cancel
           </button>
         </div>
       )}
-      {!collapsed && (
+
+      {/* Normal view */}
+      {!collapsed && !editingStoich && (
         <div className="p-6">
           <EquationDisplay reaction={node.reaction} />
+          {showBalanceWarning && (
+            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-300 p-3">
+              <div className="flex items-start gap-2">
+                <span className="text-amber-600 flex-shrink-0 mt-0.5">{"\u26A0\uFE0F"}</span>
+                <div className="text-sm flex-1">
+                  <p className="font-semibold text-amber-800">Unbalanced equation</p>
+                  <p className="text-amber-700 mt-1">
+                    {balanceCheck.imbalances.map((im) => (
+                      <span key={im.atom} className="inline-block mr-3">
+                        <span className="font-mono font-semibold">{im.atom}</span>:{" "}
+                        <span className="text-amber-500 font-mono">
+                          {im.delta > 0 ? "+" : ""}{im.delta.toPrecision(4)}
+                        </span>
+                      </span>
+                    ))}
+                  </p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <p className="text-amber-600 text-xs">
+                      This will cause a mass balance discrepancy.
+                    </p>
+                    <button
+                      onClick={() => setBalanceAccepted(true)}
+                      className="text-xs font-medium text-amber-700 hover:text-amber-900 underline"
+                    >
+                      Accept
+                    </button>
+                    {onEditReaction && (
+                      <button
+                        onClick={() => setEditingStoich(true)}
+                        className="text-xs font-medium text-amber-700 hover:text-amber-900 underline"
+                      >
+                        Fix stoichiometry
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stoichiometry editor */}
+      {!collapsed && editingStoich && (
+        <div className="p-6">
+          <StoichiometryEditor
+            reaction={node.reaction}
+            onSave={handleSaveStoich}
+            onCancel={() => setEditingStoich(false)}
+          />
         </div>
       )}
     </div>

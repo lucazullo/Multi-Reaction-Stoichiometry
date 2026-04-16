@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type {
+  AppMode,
+  BalancedReaction,
   CalculationInput,
   EnergyUnit,
   ParseReactionResponse,
@@ -49,6 +51,25 @@ import DownloadButton from "@/components/DownloadButton";
 import ErrorMessage from "@/components/ErrorMessage";
 import HelpModal from "@/components/HelpModal";
 import SessionManager from "@/components/SessionManager";
+import ModeToggle from "@/components/ModeToggle";
+import PropertyWarnings from "@/components/PropertyWarnings";
+import ConversionSlider from "@/components/ConversionSlider";
+import LookupButton from "@/components/LookupButton";
+import ReferencesPanel from "@/components/ReferencesPanel";
+import EquilibriumPanel from "@/components/EquilibriumPanel";
+import KineticsPanel from "@/components/KineticsPanel";
+import ICETable from "@/components/ICETable";
+import LeChatelierDisplay from "@/components/LeChatelierDisplay";
+import ConcentrationChart from "@/components/ConcentrationChart";
+import TemperatureInput from "@/components/TemperatureInput";
+import CompetingReactionsEditor from "@/components/CompetingReactionsEditor";
+import SelectivityDashboard from "@/components/SelectivityDashboard";
+import InitialConcentrations, { deriveDefaults } from "@/components/InitialConcentrations";
+import type { RateLaw, EquilibriumData, EquilibriumResult, KineticsResult, CompetingReactionSet, SelectivityResult, Reference } from "@/lib/types";
+import { solveEquilibrium } from "@/lib/equilibrium";
+import { integrateKinetics } from "@/lib/kinetics";
+import { calculateSelectivity } from "@/lib/selectivity";
+import { STANDARD_TEMPERATURE } from "@/lib/constants";
 import {
   createSnapshot,
   saveSession,
@@ -80,7 +101,19 @@ export default function Home() {
   const [savedPrices, setSavedPrices] = useState<Array<{ value: string; unit: string }>>([]);
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics" | "properties">("per-reaction");
+  const [activeTab, setActiveTab] = useState<"per-reaction" | "totals" | "thermo" | "economics" | "properties" | "kinetics" | "equilibrium" | "selectivity">("per-reaction");
+
+  // v2: App mode
+  const [mode, setMode] = useState<AppMode>("basic");
+  const [calcTemperature, setCalcTemperature] = useState(STANDARD_TEMPERATURE);
+  const [calcVolume, setCalcVolume] = useState(1); // liters, for equilibrium
+  const [equilibriumResults, setEquilibriumResults] = useState<Map<string, EquilibriumResult>>(new Map());
+  const [kineticsResults, setKineticsResults] = useState<Map<string, KineticsResult>>(new Map());
+  const [kineticsErrors, setKineticsErrors] = useState<Map<string, string>>(new Map());
+  const [kineticsTime, setKineticsTime] = useState(100); // seconds
+  // Per-reaction editable initial concentrations: reactionId → { formula → mol/L }
+  const [kineticsInitialConc, setKineticsInitialConc] = useState<Map<string, Record<string, number>>>(new Map());
+  const [selectivityResults, setSelectivityResults] = useState<SelectivityResult[]>([]);
 
   // --- Handlers ---
 
@@ -141,6 +174,73 @@ export default function Home() {
     setSystemEcon(null);
   };
 
+  const handleRateLawFound = (id: string, rateLaw: RateLaw, references: Reference[]) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id
+          ? { ...n, reaction: { ...n.reaction, rateLaw, references } }
+          : n
+      ),
+    }));
+  };
+
+  const handleCompetingSetsChange = (sets: CompetingReactionSet[]) => {
+    setSystem((prev) => ({ ...prev, competingSets: sets.length > 0 ? sets : undefined }));
+    setSelectivityResults([]);
+  };
+
+  const handleRateLawChange = (id: string, rateLaw: RateLaw | undefined) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id ? { ...n, reaction: { ...n.reaction, rateLaw } } : n
+      ),
+    }));
+    setKineticsResults(new Map());
+  };
+
+  const handleEquilibriumChange = (id: string, equilibrium: EquilibriumData | undefined) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id ? { ...n, reaction: { ...n.reaction, equilibrium } } : n
+      ),
+    }));
+    setEquilibriumResults(new Map());
+    setKineticsResults(new Map()); // equilibrium affects kinetics too
+    setKineticsErrors(new Map());
+  };
+
+  const handleEquilibriumFound = (id: string, equilibrium: EquilibriumData, references: Reference[]) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id
+          ? { ...n, reaction: { ...n.reaction, equilibrium, references } }
+          : n
+      ),
+    }));
+    setSystemResult(null);
+    setSystemThermo(null);
+    setSystemEcon(null);
+  };
+
+  const handleConversionChange = (id: string, conversion: number) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id
+          ? { ...n, reaction: { ...n.reaction, conversion: conversion >= 1 ? undefined : conversion } }
+          : n
+      ),
+    }));
+    // Clear results since conversion changed
+    setSystemResult(null);
+    setSystemThermo(null);
+    setSystemEcon(null);
+  };
+
   const handleRenameReaction = (id: string, name: string) => {
     setSystem((prev) => ({
       ...prev,
@@ -148,6 +248,19 @@ export default function Home() {
         n.id === id ? { ...n, displayName: name || undefined } : n
       ),
     }));
+  };
+
+  const handleEditReaction = (id: string, reaction: BalancedReaction) => {
+    setSystem((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === id ? { ...n, reaction } : n
+      ),
+    }));
+    // Clear stale results since stoichiometry changed
+    setSystemResult(null);
+    setSystemThermo(null);
+    setSystemEcon(null);
   };
 
   const handleAddLink = (link: Omit<SeriesLink, "id">) => {
@@ -269,7 +382,7 @@ export default function Home() {
     if (!systemResult) return;
     downloadCSV(
       generateSystemFullCSV(system, systemResult, systemThermo, systemEcon, energyUnit),
-      "stoichiometry-system-report.csv"
+      "reactioniq-system-report.csv"
     );
   };
 
@@ -281,23 +394,23 @@ export default function Home() {
 
   return (
     <>
-      <header className="bg-gradient-to-r from-slate-800 via-teal-900 to-slate-800 px-6 py-10 text-center text-white relative">
+      <header className="bg-gradient-to-b from-slate-50 to-slate-100 border-b border-slate-200 px-6 py-8 text-center relative">
         <button
           onClick={() => setShowHelp(true)}
-          className="absolute top-4 right-4 flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/90 transition hover:bg-white/20"
+          className="absolute top-4 right-4 flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
           </svg>
           Help
         </button>
-        <img src="/logo.png" alt="Logo" className="mx-auto mb-3 h-16 w-16 invert" />
-        <h1 className="text-3xl font-bold tracking-tight">
-          Multi-Reaction Stoichiometry Calculator
-        </h1>
-        <p className="mt-2 text-sm text-teal-200">
-          Build parallel and sequential reaction systems. Calculate quantities, thermodynamics, and economics across the full chain.
+        <img src="/logo.png" alt="ReactionIQ" className="mx-auto mb-3 h-28 w-auto" />
+        <p className="text-sm text-slate-500">
+          Advanced reaction engineering: stoichiometry, kinetics, equilibria, selectivity, thermodynamics, and economics.
         </p>
+        <div className="mt-4 flex justify-center">
+          <ModeToggle mode={mode} onChange={setMode} />
+        </div>
       </header>
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
@@ -365,7 +478,46 @@ export default function Home() {
                   {incomingLinks.map((link) => (
                     <LinkBadge key={link.id} link={link} nodes={system.nodes} onDelete={handleDeleteLink} />
                   ))}
-                  <ReactionCard node={node} index={i} onDelete={handleDeleteReaction} onRename={handleRenameReaction} />
+                  <ReactionCard node={node} index={i} onDelete={handleDeleteReaction} onRename={handleRenameReaction} onEditReaction={handleEditReaction} />
+                  {mode === "advanced" && (
+                    <div className="mx-4 -mt-1 mb-1 rounded-b-lg border border-t-0 border-gray-200 bg-gray-50 px-4 py-3 space-y-3">
+                      <ConversionSlider
+                        value={node.reaction.conversion ?? 1}
+                        onChange={(v) => handleConversionChange(node.id, v)}
+                      />
+                      <KineticsPanel
+                        rateLaw={node.reaction.rateLaw}
+                        reaction={node.reaction}
+                        onChange={(rl) => handleRateLawChange(node.id, rl)}
+                      />
+                      <EquilibriumPanel
+                        equilibrium={node.reaction.equilibrium}
+                        onChange={(eq) => handleEquilibriumChange(node.id, eq)}
+                      />
+                      <LookupButton
+                        reaction={node.reaction}
+                        onRateLawFound={(rl, refs) => handleRateLawFound(node.id, rl, refs)}
+                        onEquilibriumFound={(eq, refs) => handleEquilibriumFound(node.id, eq, refs)}
+                        onNotesFound={(notes) => {
+                          setSystem((prev) => ({
+                            ...prev,
+                            nodes: prev.nodes.map((n) =>
+                              n.id === node.id ? { ...n, reaction: { ...n.reaction, lookupNotes: notes } } : n
+                            ),
+                          }));
+                        }}
+                      />
+                      {node.reaction.lookupNotes && (
+                        <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2">
+                          <p className="text-[10px] font-medium text-sky-700 mb-0.5">Literature notes</p>
+                          <p className="text-xs text-sky-900">{node.reaction.lookupNotes}</p>
+                        </div>
+                      )}
+                      {node.reaction.references && node.reaction.references.length > 0 && (
+                        <ReferencesPanel references={node.reaction.references} />
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -431,16 +583,21 @@ export default function Home() {
         {systemResult && (
           <>
             {/* Tab bar */}
-            <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+            <div className="flex gap-1 rounded-lg bg-gray-100 p-1 flex-wrap">
               {(
                 [
-                  ["per-reaction", "Per Reaction"],
-                  ["totals", "System Totals"],
-                  ["properties", "Properties"],
-                  ["thermo", "Thermodynamics"],
-                  ["economics", "Economics"],
+                  ["per-reaction", "Per Reaction", false],
+                  ["totals", "System Totals", false],
+                  ["properties", "Properties", false],
+                  ["thermo", "Thermodynamics", false],
+                  ["kinetics", "Kinetics", true],
+                  ["equilibrium", "Equilibrium", true],
+                  ["selectivity", "Selectivity", true],
+                  ["economics", "Economics", false],
                 ] as const
-              ).map(([key, label]) => (
+              )
+                .filter(([, , advancedOnly]) => !advancedOnly || mode === "advanced")
+                .map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
@@ -622,7 +779,304 @@ export default function Home() {
                   totals={systemResult.totals}
                   system={system}
                 />
+                {systemResult.propertyWarnings && systemResult.propertyWarnings.length > 0 && (
+                  <div className="mt-4">
+                    <PropertyWarnings warnings={systemResult.propertyWarnings} />
+                  </div>
+                )}
               </section>
+            )}
+
+            {/* Kinetics tab (v2 advanced) */}
+            {activeTab === "kinetics" && mode === "advanced" && (
+              <div className="space-y-4">
+                {/* Controls */}
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-gray-800">Kinetics Analysis</h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <TemperatureInput valueK={calcTemperature} onChange={setCalcTemperature} />
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-600">Integration time (s)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min={0.001}
+                        value={kineticsTime}
+                        onChange={(e) => setKineticsTime(Math.max(0.001, Number(e.target.value)))}
+                        className="w-24 rounded border border-gray-300 px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-600">Volume (L)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min={0.001}
+                        value={calcVolume}
+                        onChange={(e) => setCalcVolume(Math.max(0.001, Number(e.target.value)))}
+                        className="w-20 rounded border border-gray-300 px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Populate defaults for any reaction that doesn't have user-edited values yet
+                        const updatedConc = new Map(kineticsInitialConc);
+                        for (const node of system.nodes) {
+                          if (!node.reaction.rateLaw) continue;
+                          if (!updatedConc.has(node.id)) {
+                            const rxnResults = systemResult?.perReaction.get(node.id);
+                            updatedConc.set(node.id, deriveDefaults(node.reaction, rxnResults, calcVolume));
+                          }
+                        }
+                        setKineticsInitialConc(updatedConc);
+
+                        const newResults = new Map<string, KineticsResult>();
+                        const newErrors = new Map<string, string>();
+                        for (const node of system.nodes) {
+                          if (!node.reaction.rateLaw) continue;
+                          const initialConc = updatedConc.get(node.id);
+                          if (!initialConc) {
+                            newErrors.set(node.id, "No initial concentrations available. Run 'Calculate System' first.");
+                            continue;
+                          }
+                          try {
+                            const kinResult = integrateKinetics(node.reaction, initialConc, calcTemperature, kineticsTime);
+                            kinResult.reactionId = node.id;
+                            newResults.set(node.id, kinResult);
+                          } catch (err) {
+                            const msg = err instanceof Error ? err.message : "Kinetics calculation failed";
+                            newErrors.set(node.id, msg);
+                          }
+                        }
+                        setKineticsResults(newResults);
+                        setKineticsErrors(newErrors);
+                      }}
+                      disabled={!systemResult}
+                      className="rounded-lg bg-teal-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-teal-700 disabled:opacity-50"
+                    >
+                      Run Kinetics
+                    </button>
+                  </div>
+                </section>
+
+                {/* Per-reaction kinetics results */}
+                {system.nodes.map((node, i) => {
+                  if (!node.reaction.rateLaw) return null;
+                  const kinResult = kineticsResults.get(node.id);
+                  const rxnResults = systemResult?.perReaction.get(node.id);
+                  // Get or derive initial concentrations for this reaction
+                  const currentConc = kineticsInitialConc.get(node.id)
+                    ?? deriveDefaults(node.reaction, rxnResults, calcVolume);
+
+                  return (
+                    <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                      <h3 className="mb-3 text-sm font-semibold text-gray-600">
+                        Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                      </h3>
+                      <div className="mb-4">
+                        <InitialConcentrations
+                          reaction={node.reaction}
+                          stoichResults={rxnResults}
+                          volume={calcVolume}
+                          values={currentConc}
+                          onChange={(vals) => {
+                            const updated = new Map(kineticsInitialConc);
+                            updated.set(node.id, vals);
+                            setKineticsInitialConc(updated);
+                          }}
+                        />
+                      </div>
+                      {kineticsErrors.get(node.id) && (
+                        <div className="mb-3 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-xs text-red-800">
+                          <strong>Error:</strong> {kineticsErrors.get(node.id)}
+                        </div>
+                      )}
+                      {kinResult ? (
+                        <ConcentrationChart result={kinResult} reaction={node.reaction} />
+                      ) : !kineticsErrors.get(node.id) ? (
+                        <p className="text-xs text-gray-400">Click &quot;Run Kinetics&quot; above to see concentration profiles.</p>
+                      ) : null}
+                    </section>
+                  );
+                })}
+
+                {!system.nodes.some((n) => n.reaction.rateLaw) && (
+                  <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm text-gray-500">
+                      Add rate law parameters to reactions to see concentration-vs-time profiles, rate constants, and half-lives.
+                    </p>
+                  </section>
+                )}
+              </div>
+            )}
+
+            {/* Equilibrium tab (v2 advanced) */}
+            {activeTab === "equilibrium" && mode === "advanced" && (
+              <div className="space-y-4">
+                {/* Temperature and volume controls */}
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold text-gray-800">Equilibrium Analysis</h2>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <TemperatureInput valueK={calcTemperature} onChange={setCalcTemperature} />
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-gray-600">Volume (L)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min={0.001}
+                        value={calcVolume}
+                        onChange={(e) => setCalcVolume(Math.max(0.001, Number(e.target.value)))}
+                        className="w-20 rounded border border-gray-300 px-2 py-1 text-xs font-mono"
+                      />
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newResults = new Map<string, EquilibriumResult>();
+                        for (const node of system.nodes) {
+                          if (!node.reaction.equilibrium || !systemResult) continue;
+                          const rxnResults = systemResult.perReaction.get(node.id);
+                          if (!rxnResults) continue;
+                          const initialMoles: Record<string, number> = {};
+                          for (const r of rxnResults) {
+                            initialMoles[r.substance.formula] = r.moles;
+                          }
+                          try {
+                            const eqResult = solveEquilibrium(node.reaction, initialMoles, calcVolume, calcTemperature);
+                            eqResult.reactionId = node.id;
+                            newResults.set(node.id, eqResult);
+                          } catch {
+                            // skip reactions where solver fails
+                          }
+                        }
+                        setEquilibriumResults(newResults);
+                      }}
+                      disabled={!systemResult}
+                      className="rounded-lg bg-teal-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-teal-700 disabled:opacity-50"
+                    >
+                      Calculate Equilibrium
+                    </button>
+                  </div>
+                </section>
+
+                {/* Per-reaction equilibrium results */}
+                {system.nodes.map((node, i) => {
+                  if (!node.reaction.equilibrium) return null;
+                  const eqResult = equilibriumResults.get(node.id);
+                  const rxnResults = systemResult?.perReaction.get(node.id);
+
+                  return (
+                    <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                      <h3 className="mb-3 text-sm font-semibold text-gray-600">
+                        Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                      </h3>
+
+                      {eqResult ? (
+                        <div className="space-y-4">
+                          {/* Summary */}
+                          <div className={`rounded-lg p-3 ${
+                            eqResult.direction === "forward" ? "bg-green-50 border border-green-200" :
+                            eqResult.direction === "reverse" ? "bg-orange-50 border border-orange-200" :
+                            "bg-gray-50 border border-gray-200"
+                          }`}>
+                            <div className="flex items-center gap-4 text-xs">
+                              <span className="font-medium">K<sub>eq</sub>(T) = <span className="font-mono">{eqResult.keqAtT.toPrecision(4)}</span></span>
+                              <span className="font-medium">Q = <span className="font-mono">{eqResult.reactionQuotient.toPrecision(4)}</span></span>
+                              <span className={`font-semibold ${
+                                eqResult.direction === "forward" ? "text-green-700" :
+                                eqResult.direction === "reverse" ? "text-orange-700" :
+                                "text-gray-600"
+                              }`}>
+                                {eqResult.direction === "forward" ? "→ Shifts forward" :
+                                 eqResult.direction === "reverse" ? "← Shifts reverse" :
+                                 "At equilibrium"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* ICE Table */}
+                          {rxnResults && (
+                            <ICETable
+                              reaction={node.reaction}
+                              initialConcentrations={Object.fromEntries(
+                                rxnResults.map((r) => [r.substance.formula, r.moles / calcVolume])
+                              )}
+                              result={eqResult}
+                            />
+                          )}
+
+                          {/* Le Chatelier */}
+                          <LeChatelierDisplay shifts={eqResult.shifts} />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400">Click &quot;Calculate Equilibrium&quot; above to see results.</p>
+                      )}
+                    </section>
+                  );
+                })}
+
+                {/* No equilibrium data message */}
+                {!system.nodes.some((n) => n.reaction.equilibrium) && (
+                  <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm text-gray-500">
+                      Add equilibrium constants to reactions to see ICE tables, equilibrium concentrations, and Le Chatelier analysis.
+                    </p>
+                  </section>
+                )}
+              </div>
+            )}
+
+            {/* Selectivity tab (v2 advanced) */}
+            {activeTab === "selectivity" && mode === "advanced" && (
+              <div className="space-y-4">
+                <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                  <h2 className="mb-4 text-lg font-semibold text-gray-800">Selectivity &amp; Competing Reactions</h2>
+                  <CompetingReactionsEditor
+                    nodes={system.nodes}
+                    competingSets={system.competingSets ?? []}
+                    onChange={handleCompetingSetsChange}
+                  />
+                </section>
+
+                {(system.competingSets ?? []).length > 0 && systemResult && (
+                  <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-gray-800">Selectivity Results</h2>
+                      <button
+                        onClick={() => {
+                          const results: SelectivityResult[] = [];
+                          for (const set of system.competingSets ?? []) {
+                            // Find total moles of shared reactant from system results
+                            let sharedMoles = 0;
+                            for (const [, rxnResults] of systemResult.perReaction) {
+                              for (const r of rxnResults) {
+                                if (r.substance.formula === set.sharedReactantFormula && r.substance.role === "reactant") {
+                                  sharedMoles = Math.max(sharedMoles, r.moles);
+                                }
+                              }
+                            }
+                            if (sharedMoles > 0) {
+                              try {
+                                results.push(calculateSelectivity(system, set, sharedMoles));
+                              } catch {
+                                // skip failed calculations
+                              }
+                            }
+                          }
+                          setSelectivityResults(results);
+                        }}
+                        className="rounded-lg bg-teal-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-teal-700"
+                      >
+                        Calculate Selectivity
+                      </button>
+                    </div>
+                    <SelectivityDashboard results={selectivityResults} />
+                  </section>
+                )}
+              </div>
             )}
 
             {/* Economics tab */}
@@ -667,8 +1121,8 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>Version 1.15 — April 2026</p>
-        <p>Powered by Claude AI for reaction parsing</p>
+        <p>ReactionIQ — v2.07a — April 2026</p>
+        <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions or suggestions?{" "}
           <a
