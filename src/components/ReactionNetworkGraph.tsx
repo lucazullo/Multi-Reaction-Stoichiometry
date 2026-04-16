@@ -9,8 +9,10 @@ import {
   useReactFlow,
   ReactFlowProvider,
   applyNodeChanges,
+  applyEdgeChanges,
   type Node,
   type Edge,
+  type EdgeChange,
   type NodeTypes,
   type NodeChange,
   Handle,
@@ -369,6 +371,7 @@ function buildGraph(
       id: l.id, source: l.fromReactionId, target: l.toReactionId,
       ...edgeHandles(l.id), label, animated: true,
       style: { stroke: "#8b5cf6", strokeWidth: 2 },
+      interactionWidth: 20,
       labelStyle: { fontSize: 10, fontFamily: "monospace", fill: "#6d28d9" },
       labelBgStyle: { fill: "#f5f3ff", fillOpacity: 0.9 },
       labelBgPadding: [6, 3] as [number, number],
@@ -405,6 +408,7 @@ function buildGraph(
       gEdges.push({
         id: eid, source: nid, target: tid, ...edgeHandles(eid),
         style: { stroke: ec, strokeWidth: 1.5, strokeDasharray: "6 3" },
+        interactionWidth: 20,
         markerEnd: { type: MarkerType.ArrowClosed, color: ec },
       });
     }
@@ -440,6 +444,7 @@ function buildGraph(
       gEdges.push({
         id: eid, source: sid, target: nid, ...edgeHandles(eid),
         style: { stroke: ec, strokeWidth: 1.5, strokeDasharray: "6 3" },
+        interactionWidth: 20,
         markerEnd: { type: MarkerType.ArrowClosed, color: ec },
       });
     }
@@ -537,6 +542,13 @@ function GraphInner({
       });
     },
     [updateLayout]
+  );
+
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      setFlowEdges((eds) => applyEdgeChanges(changes, eds));
+    },
+    []
   );
 
   // Right-click on edge → show context menu
@@ -669,6 +681,7 @@ function GraphInner({
           nodes={flowNodes}
           edges={flowEdges}
           onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
           onEdgeContextMenu={onEdgeContextMenu}
           onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
