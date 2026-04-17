@@ -79,6 +79,7 @@ export async function POST(request: Request) {
         enthalpyOfFormation: ref?.enthalpyOfFormation ?? s.enthalpyOfFormation ?? 0,
         hhv: ref?.hhv ?? s.hhv ?? null,
         lhv: ref?.lhv ?? s.lhv ?? null,
+        smiles: s.smiles ?? null,
       };
     };
 

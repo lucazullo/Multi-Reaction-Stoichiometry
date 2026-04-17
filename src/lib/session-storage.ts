@@ -168,6 +168,7 @@ function migrateSubstance(s: Record<string, unknown>): void {
   if (s.hhv === undefined) s.hhv = null;
   if (s.lhv === undefined) s.lhv = null;
   if (s.enthalpyOfFormation === undefined) s.enthalpyOfFormation = 0;
+  if (s.smiles === undefined) s.smiles = null;
 }
 
 function migrateSystem(system: ReactionSystem): void {

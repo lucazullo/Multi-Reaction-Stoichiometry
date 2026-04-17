@@ -11,6 +11,7 @@ export interface Substance {
   hhv: number | null; // Higher Heating Value in kJ/kg; null if not combustible
   lhv: number | null; // Lower Heating Value in kJ/kg; null if not combustible
   enthalpyOfFormation: number; // kJ/mol, standard ΔHf°
+  smiles: string | null; // canonical SMILES for structure rendering; null for atoms/ions
   role: "reactant" | "product";
 }
 

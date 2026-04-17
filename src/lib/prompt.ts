@@ -9,6 +9,7 @@ export const SYSTEM_PROMPT = `You are a chemistry expert. Given a natural langua
 7. For gaseous substances, provide the gas density in kg/m³ at STP (0°C, 1 atm)
 8. Provide the standard enthalpy of formation (ΔHf°) in kJ/mol for each substance
 9. For combustible substances (including combustible solids like carbon, sugar, urea, etc.), provide the Higher Heating Value (HHV) and Lower Heating Value (LHV) in kJ/kg. A substance is combustible if it can react with oxygen to release heat.
+10. Provide the canonical SMILES string for each substance (e.g., "O" for water, "c1ccccc1" for benzene, "[H][H]" for H₂). Use canonical SMILES notation. For simple atoms/ions or when SMILES is not applicable, return null.
 
 Important rules:
 - Balance the equation with the smallest coefficients. Whole-number coefficients are preferred, but fractional coefficients (e.g., ½, ³⁄₂) are acceptable when they are the conventional form or produce a simpler representation
@@ -85,6 +86,11 @@ export const TOOL_SCHEMA = {
               description:
                 "Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Provide for ALL combustible substances. Null only for non-combustible.",
             },
+            smiles: {
+              type: ["string", "null"],
+              description:
+                'Canonical SMILES string for the substance (e.g., "O" for water, "c1ccccc1" for benzene, "[H][H]" for H₂, "N" for ammonia). Null only for bare atoms/ions.',
+            },
           },
           required: [
             "formula",
@@ -97,6 +103,7 @@ export const TOOL_SCHEMA = {
             "densityGas",
             "hhv",
             "lhv",
+            "smiles",
           ],
         },
       },
@@ -151,6 +158,11 @@ export const TOOL_SCHEMA = {
               description:
                 "Lower Heating Value in kJ/kg. Same as HHV but water remains as vapor. Provide for ALL combustible substances. Null only for non-combustible.",
             },
+            smiles: {
+              type: ["string", "null"],
+              description:
+                'Canonical SMILES string for the substance (e.g., "O" for water, "c1ccccc1" for benzene, "[H][H]" for H₂, "N" for ammonia). Null only for bare atoms/ions.',
+            },
           },
           required: [
             "formula",
@@ -163,6 +175,7 @@ export const TOOL_SCHEMA = {
             "densityGas",
             "hhv",
             "lhv",
+            "smiles",
           ],
         },
       },

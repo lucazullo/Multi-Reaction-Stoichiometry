@@ -1,0 +1,125 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Script from "next/script";
+
+/* global SmilesDrawer */
+declare global {
+  interface Window {
+    SmilesDrawer?: {
+      parse: (
+        smiles: string,
+        cb: (tree: unknown) => void,
+        errCb?: (err: unknown) => void
+      ) => void;
+      SvgDrawer: new (opts: Record<string, unknown>) => {
+        draw: (
+          tree: unknown,
+          target: SVGSVGElement | HTMLElement,
+          theme: string,
+          infoOnly: boolean
+        ) => void;
+      };
+    };
+  }
+}
+
+interface MoleculeStructureProps {
+  smiles: string;
+  width?: number;
+  height?: number;
+  className?: string;
+}
+
+let sdReady = false;
+const waiters: Array<() => void> = [];
+
+function onSdReady() {
+  sdReady = true;
+  for (const w of waiters) w();
+  waiters.length = 0;
+}
+
+export default function MoleculeStructure({
+  smiles,
+  width = 200,
+  height = 150,
+  className = "",
+}: MoleculeStructureProps) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [error, setError] = useState(false);
+  const [loaded, setLoaded] = useState(sdReady);
+
+  // Wait for script to load
+  useEffect(() => {
+    if (sdReady) {
+      setLoaded(true);
+      return;
+    }
+    const waiter = () => setLoaded(true);
+    waiters.push(waiter);
+    return () => {
+      const idx = waiters.indexOf(waiter);
+      if (idx >= 0) waiters.splice(idx, 1);
+    };
+  }, []);
+
+  // Draw molecule when ready
+  useEffect(() => {
+    if (!loaded || !svgRef.current || !window.SmilesDrawer) return;
+    setError(false);
+
+    const svg = svgRef.current;
+    // Clear previous drawing
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    try {
+      const drawer = new window.SmilesDrawer.SvgDrawer({
+        width,
+        height,
+        bondThickness: 1.5,
+        bondLength: 15,
+        shortBondLength: 0.85,
+        bondSpacing: 0.18 * 15,
+        fontSizeLarge: 6,
+        fontSizeSmall: 4,
+        padding: 20,
+        compactDrawing: true,
+        atomVisualization: "default",
+      });
+
+      window.SmilesDrawer.parse(
+        smiles,
+        (tree) => {
+          drawer.draw(tree, svg, "light", false);
+        },
+        () => {
+          setError(true);
+        }
+      );
+    } catch {
+      setError(true);
+    }
+  }, [loaded, smiles, width, height]);
+
+  if (error) {
+    return null; // silently fail — fall back to formula view
+  }
+
+  return (
+    <>
+      <Script
+        src="/smiles-drawer.min.js"
+        strategy="afterInteractive"
+        onLoad={onSdReady}
+      />
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        className={className}
+        xmlns="http://www.w3.org/2000/svg"
+      />
+    </>
+  );
+}
