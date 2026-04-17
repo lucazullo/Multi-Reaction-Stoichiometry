@@ -16,31 +16,24 @@ interface EquationDisplayProps {
 
 type ViewMode = "formula" | "structure";
 
-const STRUCT_W = 120;
-const STRUCT_H = 90;
+const STRUCT_W = 150;
+const STRUCT_H = 120;
 
-/** Render a single substance in structure view: optional coefficient + diagram */
+/** Render a single substance in structure view */
 function StructureItem({ s }: { s: Substance }) {
   return (
-    <div className="flex items-center gap-0.5">
-      {s.coefficient > 1 && (
-        <span className="text-sm font-mono font-bold text-gray-500 flex-shrink-0 -mr-0.5">
-          {s.coefficient}
-        </span>
+    <div className="flex flex-col items-center">
+      {s.smiles ? (
+        <MoleculeStructure smiles={s.smiles} width={STRUCT_W} height={STRUCT_H} />
+      ) : (
+        <div
+          className="flex items-center justify-center font-mono text-lg font-semibold text-gray-700 border border-dashed border-gray-300 rounded-lg bg-gray-50"
+          style={{ width: STRUCT_W, height: STRUCT_H }}
+        >
+          {s.formula}
+        </div>
       )}
-      <div className="flex flex-col items-center">
-        {s.smiles ? (
-          <MoleculeStructure smiles={s.smiles} width={STRUCT_W} height={STRUCT_H} />
-        ) : (
-          <div
-            className="flex items-center justify-center font-mono text-sm text-gray-800"
-            style={{ width: STRUCT_W, height: STRUCT_H }}
-          >
-            {s.formula}
-          </div>
-        )}
-        <span className="text-[10px] text-gray-400 -mt-0.5 leading-tight">{s.formula}</span>
-      </div>
+      <span className="text-[10px] text-gray-400 mt-0.5 leading-tight">{s.formula}</span>
     </div>
   );
 }
@@ -66,13 +59,13 @@ export default function EquationDisplay({ reaction }: EquationDisplayProps) {
       .then((url) => {
         const a = document.createElement("a");
         a.href = url;
-        a.download = "reaction-structures.png";
+        a.download = "reaction.png";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
       })
       .catch(() => {
-        alert("Could not export structures as PNG.");
+        alert("Could not export as PNG.");
       });
   };
 
@@ -123,20 +116,26 @@ export default function EquationDisplay({ reaction }: EquationDisplayProps) {
               {equationText}
             </p>
           ) : (
-            /* Structure view: render each substance as a molecule diagram */
-            <div className="flex items-center justify-center gap-0 flex-wrap pt-3">
+            /* Structure view */
+            <div className="flex items-center justify-center flex-wrap gap-x-1 gap-y-2 pt-4">
               {reaction.reactants.map((s, i) => (
-                <div key={`r-${i}`} className="flex items-center">
-                  {i > 0 && <span className="text-base text-gray-400 font-mono mx-0.5">+</span>}
+                <div key={`r-${i}`} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-lg text-gray-400 font-mono">+</span>}
+                  {s.coefficient > 1 && (
+                    <span className="text-base font-mono font-bold text-gray-500">{s.coefficient}</span>
+                  )}
                   <StructureItem s={s} />
                 </div>
               ))}
 
-              <span className="text-xl text-gray-500 font-mono mx-1">{arrow}</span>
+              <span className="text-xl text-gray-500 font-mono mx-2">{arrow}</span>
 
               {reaction.products.map((s, i) => (
-                <div key={`p-${i}`} className="flex items-center">
-                  {i > 0 && <span className="text-base text-gray-400 font-mono mx-0.5">+</span>}
+                <div key={`p-${i}`} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-lg text-gray-400 font-mono">+</span>}
+                  {s.coefficient > 1 && (
+                    <span className="text-base font-mono font-bold text-gray-500">{s.coefficient}</span>
+                  )}
                   <StructureItem s={s} />
                 </div>
               ))}

@@ -36,11 +36,11 @@ const EXPLICIT_H_MAP: Record<string, string> = {
   S: "[H]S[H]",                       // hydrogen sulfide
   "[HH]": "[H][H]",                   // hydrogen gas
   "[H][H]": "[H][H]",                 // hydrogen gas (alt)
-  "Cl": "[H]Cl",                      // hydrochloric acid
-  "F": "[H]F",                        // hydrogen fluoride
-  "Br": "[H]Br",                      // hydrogen bromide
-  "I": "[H]I",                        // hydrogen iodide
-  "P": "[H]P([H])[H]",               // phosphine
+  Cl: "[H]Cl",                        // hydrochloric acid
+  F: "[H]F",                          // hydrogen fluoride
+  Br: "[H]Br",                        // hydrogen bromide
+  I: "[H]I",                          // hydrogen iodide
+  P: "[H]P([H])[H]",                 // phosphine
 };
 
 function expandSmiles(smiles: string): string {
@@ -97,16 +97,18 @@ export default function MoleculeStructure({
     while (svg.firstChild) svg.removeChild(svg.firstChild);
 
     try {
+      // Render at higher internal resolution for quality.
+      // smiles-drawer auto-fits via viewBox; the CSS width/height controls display size.
       const drawer = new window.SmilesDrawer.SvgDrawer({
-        width,
-        height,
-        bondThickness: 1.5,
-        bondLength: 15,
+        width: 300,
+        height: 300,
+        bondThickness: 1,
+        bondLength: 25,
         shortBondLength: 0.85,
-        bondSpacing: 0.18 * 15,
-        fontSizeLarge: 6,
-        fontSizeSmall: 4,
-        padding: 20,
+        bondSpacing: 4.5,
+        fontSizeLarge: 11,
+        fontSizeSmall: 5,
+        padding: 15,
         compactDrawing: true,
         atomVisualization: "default",
       });
@@ -126,7 +128,7 @@ export default function MoleculeStructure({
   }, [loaded, smiles, width, height]);
 
   if (error) {
-    return null; // silently fail — fall back to formula view
+    return null; // fall back to formula in parent
   }
 
   return (
@@ -142,6 +144,7 @@ export default function MoleculeStructure({
         height={height}
         className={className}
         xmlns="http://www.w3.org/2000/svg"
+        style={{ display: "block" }}
       />
     </>
   );
