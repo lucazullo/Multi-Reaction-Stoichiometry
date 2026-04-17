@@ -120,6 +120,10 @@ export default function Home() {
   const [kineticsInitialConc, setKineticsInitialConc] = useState<Map<string, Record<string, number>>>(new Map());
   const [selectivityResults, setSelectivityResults] = useState<SelectivityResult[]>([]);
 
+  /** Display equation with ⇌ when equilibrium data is set, → otherwise */
+  const displayEq = (r: BalancedReaction) =>
+    r.equilibrium ? r.equation.replace(/→|⟶|->/, "⇌") : r.equation;
+
   // --- Handlers ---
 
   // insertAt: index to insert before, undefined = append at end
@@ -644,7 +648,7 @@ export default function Home() {
                     <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                       <div className="mb-4 flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-gray-600">
-                          Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                          Reaction {i + 1}: <span className="text-gray-800">{displayEq(node.reaction)}</span>
                         </h3>
                         <DownloadButton onClick={() => handleDownloadPerReaction(node.id)} />
                       </div>
@@ -757,7 +761,7 @@ export default function Home() {
                     <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                       <div className="mb-4 flex items-center justify-between">
                         <h3 className="text-sm font-semibold text-gray-600">
-                          Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                          Reaction {i + 1}: <span className="text-gray-800">{displayEq(node.reaction)}</span>
                         </h3>
                         <DownloadButton onClick={() => downloadCSV(generateThermodynamicsCSV(thermo, energyUnit, results[selIdx]), `thermo-rxn${i+1}.csv`)} />
                       </div>
@@ -888,7 +892,7 @@ export default function Home() {
                   return (
                     <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                       <h3 className="mb-3 text-sm font-semibold text-gray-600">
-                        Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                        Reaction {i + 1}: <span className="text-gray-800">{displayEq(node.reaction)}</span>
                       </h3>
                       <div className="mb-4">
                         <InitialConcentrations
@@ -986,7 +990,7 @@ export default function Home() {
                   return (
                     <section key={node.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                       <h3 className="mb-3 text-sm font-semibold text-gray-600">
-                        Reaction {i + 1}: <span className="text-gray-800">{node.reaction.equation}</span>
+                        Reaction {i + 1}: <span className="text-gray-800">{displayEq(node.reaction)}</span>
                       </h3>
 
                       {eqResult ? (

@@ -11,7 +11,9 @@ export default function EquationDisplay({ reaction }: EquationDisplayProps) {
     <div className="space-y-4">
       <div className="rounded-xl bg-gray-50 border border-gray-200 p-6 text-center">
         <p className="font-mono text-2xl tracking-wide text-gray-800">
-          {reaction.equation}
+          {reaction.equilibrium
+            ? reaction.equation.replace(/→|⟶|->/, "⇌")
+            : reaction.equation}
         </p>
       </div>
 

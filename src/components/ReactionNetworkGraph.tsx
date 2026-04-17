@@ -354,7 +354,7 @@ function buildGraph(
       position: pos(n.id, ix * xSp - gw / 2 + cx, lv * ySp + 150),
       draggable: true,
       data: {
-        label: n.label.slice(0, 50), equation: n.reaction.equation,
+        label: n.label.slice(0, 50), equation: n.reaction.equilibrium ? n.reaction.equation.replace(/→|⟶|->/, "⇌") : n.reaction.equation,
         index: nodes.indexOf(n), displayName: n.displayName,
         color: colorOf(n.id) || defColor, onColorChange,
       },
