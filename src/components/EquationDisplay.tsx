@@ -47,7 +47,6 @@ function StructureItem({ s }: { s: Substance }) {
 
 export default function EquationDisplay({ reaction }: EquationDisplayProps) {
   const allSubstances = [...reaction.reactants, ...reaction.products];
-  const hasAnySmiles = allSubstances.some((s) => s.smiles);
 
   const [view, setView] = useState<ViewMode>("formula");
   const structRef = useRef<HTMLDivElement>(null);
@@ -63,7 +62,6 @@ export default function EquationDisplay({ reaction }: EquationDisplayProps) {
     toPng(structRef.current, {
       backgroundColor: "#f9fafb",
       pixelRatio: 2,
-      style: { padding: "16px" },
     })
       .then((url) => {
         const a = document.createElement("a");
@@ -96,39 +94,37 @@ export default function EquationDisplay({ reaction }: EquationDisplayProps) {
               PNG
             </span>
           </button>
-          {hasAnySmiles && (
-            <button
-              onClick={() => setView(view === "formula" ? "structure" : "formula")}
-              className="rounded-lg border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 shadow-sm"
-              title={view === "formula" ? "Show molecular structures" : "Show chemical formula"}
-            >
-              {view === "formula" ? (
-                <span className="flex items-center gap-1">
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-                  </svg>
-                  Structure
-                </span>
-              ) : (
-                <span className="flex items-center gap-1">
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-                  </svg>
-                  Formula
-                </span>
-              )}
-            </button>
-          )}
+          <button
+            onClick={() => setView(view === "formula" ? "structure" : "formula")}
+            className="rounded-lg border border-gray-300 bg-white px-2 py-0.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 shadow-sm"
+            title={view === "formula" ? "Show molecular structures" : "Show chemical formula"}
+          >
+            {view === "formula" ? (
+              <span className="flex items-center gap-1">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                </svg>
+                Structure
+              </span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+                </svg>
+                Formula
+              </span>
+            )}
+          </button>
         </div>
 
-        <div ref={structRef}>
+        <div ref={structRef} className="px-2 py-3">
           {view === "formula" ? (
-            <p className="font-mono text-2xl tracking-wide text-gray-800">
+            <p className="font-mono text-2xl tracking-wide text-gray-800 leading-relaxed">
               {equationText}
             </p>
           ) : (
             /* Structure view: render each substance as a molecule diagram */
-            <div className="flex items-center justify-center gap-0 flex-wrap pt-5 pb-1">
+            <div className="flex items-center justify-center gap-0 flex-wrap pt-3">
               {reaction.reactants.map((s, i) => (
                 <div key={`r-${i}`} className="flex items-center">
                   {i > 0 && <span className="text-base text-gray-400 font-mono mx-0.5">+</span>}
