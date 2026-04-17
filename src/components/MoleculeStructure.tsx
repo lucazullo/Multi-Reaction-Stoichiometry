@@ -24,6 +24,29 @@ declare global {
   }
 }
 
+/**
+ * smiles-drawer collapses implicit hydrogens into formula text (e.g. "C" → "CH₄")
+ * instead of drawing bonds. For small molecules we expand to explicit-H SMILES
+ * so they render as proper structural diagrams.
+ */
+const EXPLICIT_H_MAP: Record<string, string> = {
+  C: "[H]C([H])([H])[H]",           // methane
+  O: "[H]O[H]",                       // water
+  N: "[H]N([H])[H]",                  // ammonia
+  S: "[H]S[H]",                       // hydrogen sulfide
+  "[HH]": "[H][H]",                   // hydrogen gas
+  "[H][H]": "[H][H]",                 // hydrogen gas (alt)
+  "Cl": "[H]Cl",                      // hydrochloric acid
+  "F": "[H]F",                        // hydrogen fluoride
+  "Br": "[H]Br",                      // hydrogen bromide
+  "I": "[H]I",                        // hydrogen iodide
+  "P": "[H]P([H])[H]",               // phosphine
+};
+
+function expandSmiles(smiles: string): string {
+  return EXPLICIT_H_MAP[smiles] ?? smiles;
+}
+
 interface MoleculeStructureProps {
   smiles: string;
   width?: number;
@@ -89,7 +112,7 @@ export default function MoleculeStructure({
       });
 
       window.SmilesDrawer.parse(
-        smiles,
+        expandSmiles(smiles),
         (tree) => {
           drawer.draw(tree, svg, "light", false);
         },
