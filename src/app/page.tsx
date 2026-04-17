@@ -78,8 +78,8 @@ import {
   exportSessionToFile,
 } from "@/lib/session-storage";
 
-let nextNodeId = 0;
-let nextLinkId = 0;
+let nextNodeId = Date.now();
+let nextLinkId = Date.now();
 
 export default function Home() {
   // System state
@@ -286,6 +286,21 @@ export default function Home() {
       links: prev.links.filter((l) => l.id !== linkId),
     }));
     setSystemResult(null);
+    setSystemThermo(null);
+    setSystemEcon(null);
+  };
+
+  const handleFeedSplitChange = (formula: string, reactionId: string, fraction: number) => {
+    setSystem((prev) => ({
+      ...prev,
+      feedSplits: {
+        ...(prev.feedSplits ?? {}),
+        [`${formula}:${reactionId}`]: fraction,
+      },
+    }));
+    setSystemResult(null);
+    setSystemThermo(null);
+    setSystemEcon(null);
   };
 
   const handleCalculateSystem = (reactionId: string, input: CalculationInput) => {
@@ -578,7 +593,7 @@ export default function Home() {
               Reaction Network
             </summary>
             <div className="p-4">
-              <ReactionNetworkGraph system={system} graphLayout={graphLayout} onLayoutChange={setGraphLayout} />
+              <ReactionNetworkGraph system={system} graphLayout={graphLayout} onLayoutChange={setGraphLayout} onDeleteLink={handleDeleteLink} onFeedSplitChange={handleFeedSplitChange} />
             </div>
           </details>
         )}

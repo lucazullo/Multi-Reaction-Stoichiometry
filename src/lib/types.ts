@@ -205,9 +205,15 @@ export interface SeriesLink {
   fraction: number; // 0–1, default 1.0
 }
 
+/** Feed split: fraction of a shared feedstock directed to a specific reaction.
+ *  Key: "normalizedFormula:reactionId", value: fraction 0–1.
+ *  When absent, equal distribution is assumed. */
+export type FeedSplits = Record<string, number>;
+
 export interface ReactionSystem {
   nodes: ReactionNode[];
   links: SeriesLink[];
+  feedSplits?: FeedSplits;
   // --- v2 additions ---
   competingSets?: CompetingReactionSet[];
 }

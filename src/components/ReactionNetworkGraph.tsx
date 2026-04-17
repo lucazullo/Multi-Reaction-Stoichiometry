@@ -63,6 +63,8 @@ interface ReactionNetworkGraphProps {
   system: ReactionSystem;
   graphLayout?: GraphLayout;
   onLayoutChange?: (layout: GraphLayout) => void;
+  onDeleteLink?: (linkId: string) => void;
+  onFeedSplitChange?: (formula: string, reactionId: string, fraction: number) => void;
 }
 
 // --- Color Picker ---
@@ -106,17 +108,22 @@ function ColorPicker({
 
 function EdgeContextMenu({
   edgeId, sourceLabel, targetLabel, currentSourceSide, currentTargetSide,
-  position, onChangeSide, onClose,
+  position, onChangeSide, onClose, isLink, onDelete, feedSplit, onFeedSplitChange,
 }: {
   edgeId: string; sourceLabel: string; targetLabel: string;
   currentSourceSide: HandleSide; currentTargetSide: HandleSide;
   position: { x: number; y: number };
   onChangeSide: (edgeId: string, sourceSide: HandleSide, targetSide: HandleSide) => void;
   onClose: () => void;
+  isLink?: boolean;
+  onDelete?: (linkId: string) => void;
+  feedSplit?: { formula: string; reactionId: string; fraction: number };
+  onFeedSplitChange?: (formula: string, reactionId: string, fraction: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [srcSide, setSrcSide] = useState(currentSourceSide);
   const [tgtSide, setTgtSide] = useState(currentTargetSide);
+  const [splitPct, setSplitPct] = useState(feedSplit ? Math.round(feedSplit.fraction * 100) : 100);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -178,6 +185,40 @@ function EdgeContextMenu({
           ))}
         </div>
       </div>
+
+      {feedSplit && onFeedSplitChange && (
+        <div className="mt-3 pt-2.5 border-t border-gray-200">
+          <p className="text-gray-400 mb-1.5">Feed split</p>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number"
+              value={splitPct}
+              min={0} max={100} step={1}
+              onChange={(e) => {
+                const v = Math.min(100, Math.max(0, parseInt(e.target.value) || 0));
+                setSplitPct(v);
+                onFeedSplitChange(feedSplit.formula, feedSplit.reactionId, v / 100);
+              }}
+              className="w-16 rounded border border-gray-300 px-2 py-1 text-xs text-center font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+            />
+            <span className="text-[11px] text-gray-500">%</span>
+          </div>
+        </div>
+      )}
+
+      {isLink && onDelete && (
+        <div className="mt-3 pt-2.5 border-t border-gray-200">
+          <button
+            onClick={() => { onDelete(edgeId); onClose(); }}
+            className="w-full flex items-center gap-1.5 rounded px-2 py-1.5 text-[11px] font-medium text-red-600 hover:bg-red-50 transition"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+            </svg>
+            Delete link
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -402,13 +443,24 @@ function buildGraph(
       draggable: true,
       data: { formula: fs.formula, name: fs.name, color: colorOf(nid), onColorChange },
     });
+    const splits = system.feedSplits ?? {};
     for (const tid of fs.targets) {
       const eid = `edge-fs-${k}-${tid}`;
       const ec = colorOf(nid) || "#3b82f6";
+      const splitKey = `${k}:${tid}`;
+      const hasSplit = fs.targets.length > 1;
+      const frac = hasSplit ? (splits[splitKey] ?? (1 / fs.targets.length)) : 1;
+      const pct = Math.round(frac * 100);
       gEdges.push({
         id: eid, source: nid, target: tid, ...edgeHandles(eid),
         style: { stroke: ec, strokeWidth: 1.5, strokeDasharray: "6 3" },
         interactionWidth: 20,
+        ...(hasSplit ? {
+          label: `${pct}%`,
+          labelStyle: { fontSize: 10, fontFamily: "monospace", fill: "#1d4ed8" },
+          labelBgStyle: { fill: "#eff6ff", fillOpacity: 0.9 },
+          labelBgPadding: [6, 3] as [number, number],
+        } : {}),
         markerEnd: { type: MarkerType.ArrowClosed, color: ec },
       });
     }
@@ -455,9 +507,11 @@ function buildGraph(
 
 /** Inner component */
 function GraphInner({
-  system, graphLayout, onLayoutChange,
+  system, graphLayout, onLayoutChange, onDeleteLink, onFeedSplitChange,
 }: {
   system: ReactionSystem; graphLayout?: GraphLayout; onLayoutChange?: (l: GraphLayout) => void;
+  onDeleteLink?: (linkId: string) => void;
+  onFeedSplitChange?: (formula: string, reactionId: string, fraction: number) => void;
 }) {
   const { fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -468,6 +522,7 @@ function GraphInner({
     edgeId: string; sourceId: string; targetId: string;
     sourceSide: HandleSide; targetSide: HandleSide;
     pos: { x: number; y: number };
+    feedSplit?: { formula: string; reactionId: string; fraction: number };
   } | null>(null);
 
   useEffect(() => { if (graphLayout) layoutRef.current = graphLayout; }, [graphLayout]);
@@ -557,6 +612,25 @@ function GraphInner({
       event.preventDefault();
       event.stopPropagation();
       const el = layoutRef.current.edges[edge.id];
+
+      // Detect feedstock split edges (id pattern: edge-fs-{formula}-{reactionId})
+      let feedSplit: { formula: string; reactionId: string; fraction: number } | undefined;
+      const fsMatch = edge.id.match(/^edge-fs-(.+)-(.+)$/);
+      if (fsMatch) {
+        const formula = fsMatch[1];
+        const reactionId = fsMatch[2];
+        const splitKey = `${formula}:${reactionId}`;
+        const splits = system.feedSplits ?? {};
+        // Count how many targets this feedstock has
+        const fsPrefix = `edge-fs-${formula}-`;
+        const siblingCount = flowEdges.filter((e) => e.id.startsWith(fsPrefix)).length;
+        feedSplit = {
+          formula,
+          reactionId,
+          fraction: splits[splitKey] ?? (siblingCount > 1 ? 1 / siblingCount : 1),
+        };
+      }
+
       setEdgeMenu({
         edgeId: edge.id,
         sourceId: edge.source,
@@ -564,9 +638,10 @@ function GraphInner({
         sourceSide: el?.sourceSide ?? "bottom",
         targetSide: el?.targetSide ?? "top",
         pos: { x: event.clientX, y: event.clientY },
+        feedSplit,
       });
     },
-    []
+    [system.feedSplits, flowEdges]
   );
 
   const onPaneClick = useCallback(() => { setEdgeMenu(null); }, []);
@@ -654,7 +729,7 @@ function GraphInner({
     <div>
       <div className="flex justify-between items-center mb-2">
         <p className="text-[10px] text-gray-400">
-          Drag nodes to rearrange • Click color dot to customize • Right-click an arrow to change its routing
+          Drag nodes to rearrange • Click color dot to customize • Right-click an arrow to route, edit split, or delete
         </p>
         <div className="flex gap-2">
           <button onClick={handleResetLayout}
@@ -706,6 +781,10 @@ function GraphInner({
           position={edgeMenu.pos}
           onChangeSide={handleEdgeSideChange}
           onClose={() => setEdgeMenu(null)}
+          isLink={system.links.some((l) => l.id === edgeMenu.edgeId)}
+          onDelete={onDeleteLink}
+          feedSplit={edgeMenu.feedSplit}
+          onFeedSplitChange={onFeedSplitChange}
         />
       )}
     </div>
@@ -713,11 +792,11 @@ function GraphInner({
 }
 
 export default function ReactionNetworkGraph({
-  system, graphLayout, onLayoutChange,
+  system, graphLayout, onLayoutChange, onDeleteLink, onFeedSplitChange,
 }: ReactionNetworkGraphProps) {
   return (
     <ReactFlowProvider>
-      <GraphInner system={system} graphLayout={graphLayout} onLayoutChange={onLayoutChange} />
+      <GraphInner system={system} graphLayout={graphLayout} onLayoutChange={onLayoutChange} onDeleteLink={onDeleteLink} onFeedSplitChange={onFeedSplitChange} />
     </ReactFlowProvider>
   );
 }
