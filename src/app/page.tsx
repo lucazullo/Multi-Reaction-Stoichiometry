@@ -66,6 +66,8 @@ import TemperatureInput from "@/components/TemperatureInput";
 import CompetingReactionsEditor from "@/components/CompetingReactionsEditor";
 import SelectivityDashboard from "@/components/SelectivityDashboard";
 import InitialConcentrations, { deriveDefaults } from "@/components/InitialConcentrations";
+import { DisclaimerBanner } from "@/components/DisclaimerBanner";
+import { TermsLink } from "@/components/TermsLink";
 import type { RateLaw, EquilibriumData, EquilibriumResult, KineticsResult, CompetingReactionSet, SelectivityResult, Reference } from "@/lib/types";
 import { solveEquilibrium } from "@/lib/equilibrium";
 import { integrateKinetics } from "@/lib/kinetics";
@@ -428,6 +430,7 @@ export default function Home() {
 
   return (
     <>
+      <DisclaimerBanner />
       <header className="bg-gradient-to-b from-slate-50 to-slate-100 border-b border-slate-200 px-6 py-8 text-center relative">
         <button
           onClick={() => setShowHelp(true)}
@@ -1157,7 +1160,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-gray-100 py-6 text-center text-xs text-gray-400 space-y-1">
-        <p>ReactionIQ — v2.13 — April 2026</p>
+        <p>ReactionIQ — v2.14a — April 2026</p>
         <p>Powered by Claude AI for reaction parsing and literature lookup</p>
         <p>
           Questions, suggestions, bug reports, or feature requests?{" "}
@@ -1167,6 +1170,11 @@ export default function Home() {
           >
             luca.zullo@verdenero.com
           </a>
+        </p>
+        <p>
+          <TermsLink className="text-teal-600 hover:text-teal-700 underline">
+            Full Terms of Use
+          </TermsLink>
         </p>
       </footer>
     </>
